@@ -1,0 +1,5 @@
+# Excel-Dateien enthalten Personendaten und gehören nicht ins Repository
+*.xlsx
+*.xlsm
+*.xls
+__pycache__/
