@@ -3,3 +3,5 @@
 *.xlsm
 *.xls
 __pycache__/
+personalplanung-daten*.json
+Sicherungen/

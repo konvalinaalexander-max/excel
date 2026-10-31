@@ -37,5 +37,31 @@ python3 tools/build_web_demo.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.x
   --vorlage tools/web/personalplanung.html --out personalplanung.html
 ```
 
-Der Prototyp speichert Änderungen nur im eigenen Browser. Für den echten Betrieb braucht es eine
-gemeinsame Datenbank auf einem Server.
+Der Prototyp speichert Änderungen nur im eigenen Browser.
+
+## Arbeitsversion (HTML + Daten-Datei auf dem Netzlaufwerk)
+
+`tools/web/personalplanung_app.html` ist das fertige Programm. Es braucht keinen Server und kein
+Internet: Programm und Daten liegen als zwei Dateien im selben Ordner auf dem Netzlaufwerk.
+
+| Datei | Inhalt |
+|---|---|
+| `personalplanung.html` | das Programm (Kopie von `tools/web/personalplanung_app.html`) |
+| `personalplanung-daten.json` | alle Daten: Personen, Wochenplan 2026/2027, Bedarf, Stunden Freiland, Mutationen, Notizen, Traktanden, Aufgaben, Verlauf |
+| `Sicherungen/` | legt das Programm selbst an: eine Kopie der Daten pro Tag |
+
+- Öffnen mit Microsoft Edge oder Google Chrome, Namen eintragen, Ordner wählen. Beim nächsten Mal
+  genügt „Weiter mit Ordner“.
+- Jede Änderung wird sofort in die Daten-Datei geschrieben, mit Name, Rolle und Zeit im Verlauf.
+- Speichern zwei Personen gleichzeitig, werden die Änderungen zusammengeführt (Versionsnummer in der
+  Datei). Änderungen der anderen lädt das Programm alle 20 Sekunden nach.
+- Andere Browser (z.B. Firefox) können die Daten nur als Arbeitskopie öffnen und herunterladen.
+
+Die Daten-Datei mit den echten Namen erzeugt `tools/build_daten.py` aus den bisherigen Excel-Dateien:
+
+```bash
+python3 tools/build_daten.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.xlsx \
+  --out personalplanung-daten.json
+```
+
+Die Daten-Datei enthält Personendaten und gehört nicht ins Repository (siehe `.gitignore`).
