@@ -56,6 +56,16 @@ Internet: Programm und Daten liegen als zwei Dateien im selben Ordner auf dem Ne
 - Speichern zwei Personen gleichzeitig, werden die Änderungen zusammengeführt (Versionsnummer in der
   Datei). Änderungen der anderen lädt das Programm alle 20 Sekunden nach.
 - Andere Browser (z.B. Firefox) können die Daten nur als Arbeitskopie öffnen und herunterladen.
+- Alle können alles ändern. Der Verlauf hält fest, wer was wann geändert hat.
+
+Blätter: **Personal** (Wochenplan, Personen mit mehreren Verträgen pro Person, «Prüfen» mit offenen
+Datenfragen), **Übersicht** (Überblick, pro Bereich, Bedarf eingeben), **Personalsitzung** (vier Fenster:
+Wo fehlen Leute? · Mutationen · Anstellen · Notizen und Protokoll), **Kräuter Eichhof** (Brett, Jahresübersicht,
+Aufgaben), **Gemüse Freiland** (Stunden, Bedarf, Team der Woche). Beim Verschieben fragt das Programm immer,
+für welche Wochen es gilt (nur diese Woche, bis KW …, ab dieser Woche).
+
+Ältere Daten-Dateien (Eintritt/Austritt als Einzelfelder) stellt das Programm beim Öffnen automatisch um:
+neue Verträge aus «AV …» in der Bemerkung, Verträge aus dem Wochenplan (zum Prüfen markiert), getrennte Namen.
 
 Die Daten-Datei mit den echten Namen erzeugt `tools/build_daten.py` aus den bisherigen Excel-Dateien:
 

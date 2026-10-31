@@ -22,6 +22,18 @@ HAUPT_CODE = {"Kräuter Eichhof": "EIC", "Kräuter Juch": "JUC", "Kräuter Feld"
               "Gemüse Freiland": "FRE", "Tomaten": "TOM", "Blumen": "BLU", "Logistik": "LOG"}
 JAHRE = [{"y": 2026, "n": 53, "off": 0}, {"y": 2027, "n": 52, "off": 53}]
 T = 105
+IMPORT_INFO = [
+    "Eingeplant wird neu aus dem Wochenplan gerechnet. Im Original zählt die Formel bei Blumen in KW 52 und 53 "
+    "die Wochen 2 und 3, und beim Weiterziehen nach 2027 sind weitere Formeln verrutscht.",
+    "Bedarf 2027: Startwerte sind die Zahlen 2026. Im Original steigen die weitergezogenen Reihen ab KW 13 "
+    "jede Woche um 1 (z.B. Blumen bis 70, Eichhof bis 60).",
+    "Bedarf Kräuter Juch ab KW 27: korrigierte Zahlen aus dem Blatt «korrg. Zahlen» (Summe Plan). In der Übersicht "
+    "standen dort noch Vorjahreswerte und Platzhalter (50 in KW 33–44).",
+    "Bedarf Logistik: Zeile «SOLL» der Übersicht.",
+    "Bedarf Gemüse Freiland: aus der Datei Arbeitsplanung Freiland 2026 (Stunden ÷ 52). Sie ist neuer als die Zahlen, "
+    "die in der Übersicht von Hand eingetragen waren (Abweichungen bis 1 Person).",
+    "Bedarf Kräuter Eichhof: Bedarf pro Gruppe aus der Kräuter-Datei (nicht «Summe Plan (Modell)» der Gesamtplanung).",
+]
 
 
 def iso_t(datum):
@@ -149,7 +161,8 @@ def daten(gesamt, kraeuter, freiland):
             partner_map.setdefault(pid, len(partner_map) + 1)
         personen.append({
             "id": i + 1, "badge": "" if z["badge"] is None else str(z["badge"]),
-            "vn": p["vorname"], "nn": p["nachname"], "fm": p["fm"] or "",
+            "vn": " ".join(str(p["vorname"] or "").split()), "nn": " ".join(str(p["nachname"] or "").split()),
+            "fm": p["fm"] or "",
             "pa": partner_map.get(pid) if pid is not None else None,
             "hb": HAUPT_CODE.get(p["bereich"], ""), "fs": z["fs"], "zu": z["zu"],
             "ein": z["ein"], "aus": z["aus"], "fn": p["funktion"], "bem": p["bemerkung"],
@@ -167,7 +180,9 @@ def daten(gesamt, kraeuter, freiland):
         f, m = aufteilen(soll[code], f_ist, m_ist)
         soll_b[code] = {"F": zwei(f), "M": zwei(m)}
     soll_b["FEL"] = {"F": [0] * T, "M": zwei(soll["FEL"])}
-    log = [sum(v[i] for v in soll["LOG"].values()) for i in range(q.NW)]
+    # Logistik: Zeile "SOLL" der Übersicht (nicht die Summe der Detailzeilen darüber)
+    ub = wb["Übersicht"]
+    log = [ub.cell(38, 5 + k).value or 0 for k in range(q.NW)]
     soll_b["LOG"] = {"F": [0] * T, "M": zwei(log)}
     f_ist, _m = q.ist_nach_geschlecht(personen_q, "FRE")
     soll_b["FRE"] = {"F": zwei(f_ist)}
@@ -190,6 +205,7 @@ def daten(gesamt, kraeuter, freiland):
         "trakt": traktanden(wb), "anfragen": [], "aufgaben": aufgaben(kraeuter),
         "log": [{"t": jetzt, "r": "System", "u": "", "x": "Daten aus den Excel-Dateien übernommen (Planung 2026 und 2027)"}],
         "nextId": len(personen) + 1, "nextReq": 1, "nextMut": 10000, "nextBew": 1,
+        "importInfo": IMPORT_INFO,
     }
     return {"format": "personalplanung", "version": 1, "gespeichert": jetzt, "von": "Import", "data": data}
 
