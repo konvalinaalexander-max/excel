@@ -24,3 +24,18 @@ python3 tools/build_personalplanung.py \
 
 Die Quelldateien und das erzeugte File enthalten Personendaten und werden nicht ins Repository
 eingecheckt (siehe `.gitignore`). Benötigt: Python 3 mit `openpyxl`.
+
+## Web-Prototyp
+
+`tools/web/personalplanung.html` ist ein klickbarer Prototyp der Planung als Webseite (Excel-Optik,
+Drag & Drop, Rückgängig, Rollen Personalchefin / Kräuter Eichhof / Gemüse Freiland).
+`tools/build_web_demo.py` füllt ihn mit der Planungsstruktur aus den Excel-Dateien und ersetzt
+alle Namen durch erfundene Namen:
+
+```bash
+python3 tools/build_web_demo.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.xlsx \
+  --vorlage tools/web/personalplanung.html --out personalplanung.html
+```
+
+Der Prototyp speichert Änderungen nur im eigenen Browser. Für den echten Betrieb braucht es eine
+gemeinsame Datenbank auf einem Server.
