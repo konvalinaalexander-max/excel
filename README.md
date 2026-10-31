@@ -5,10 +5,11 @@ Die Blätter lehnen sich an die bestehenden Dateien an.
 
 | Blatt | Für wen | Inhalt |
 |---|---|---|
-| Planung | Personalchefin | Eine Zeile pro Person, pro Woche ein Kürzel: EIC, JUC, FEL, FRE, TOM, BLU, LOG, F (Ferien), K (Krank), U (Unfall). Zwei Bereiche in einer Woche: `BLU/EIC` (zählt je halb). |
-| Übersicht | Personalchefin | Pro Bereich IST, SOLL und IST - SOLL, getrennt nach Frauen und Männern. Dazu „Wen anstellen?“ und Grafiken. |
-| Kräuter Eichhof | Kräuter-Leitung | Namen erscheinen automatisch nach Gruppe (Steckling, Fax 10.5er, Fax 13er, Verteilen / Topfmaschine, Luchs). Pro Gruppe: Bedarf (Eingabe), Ist, Differenz. |
-| Gemüse Freiland | Gemüse-Leitung | Stundenplanung wie bisher. Darunter Soll, Ist und Differenz, ohne Namen. |
+| Planung | Personalchefin | Eine Zeile pro Person mit Hauptbereich. Pro Woche aus der Liste: EIC, JUC, FEL, FRE, TOM, BLU, LOG, F (Ferien), K (Krank), U (Unfall) oder zwei Bereiche wie `BLU/FRE` (zählt je halb). |
+| Übersicht | Personalchefin | Pro Bereich IST, SOLL und IST - SOLL, getrennt nach Frauen und Männern. Dazu „Wen anstellen?“. |
+| Grafik | Personalchefin | Bereich wählen: Frauen, Männer und Total – Säulen = eingeplant, Linie = Bedarf. |
+| Kräuter Eichhof | Kräuter-Leitung | Neue Leute ohne Gruppe, Gruppen mit Namen (automatisch), Bedarf / Ist / Differenz je Gruppe, Total und „Gruppen zuteilen“ (Name und Gruppe per Auswahlliste). |
+| Gemüse Freiland | Gemüse-Leitung | Stundenplanung wie bisher. Darunter Soll, Ist und Differenz (ohne Namen) und eine Grafik. |
 | Anleitung, Listen | alle / Admin | Kurze Anleitung, Jahr und Auswahllisten. |
 
 ## File erzeugen
