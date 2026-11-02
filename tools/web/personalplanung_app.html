@@ -440,7 +440,7 @@ const opt = (v, label, sel) => `<option value="${esc(v)}"${String(sel) === Strin
 let d = null;
 const PERSIST = ['tab','user','pView','krView','uView','krShow','chartArea','bedArea','mutRange','hireN'];
 const ui = {tab:'personal', user:'', pView:'plan', krView:'woche', uView:'ueberblick', krShow:'alle', chartArea:'ALL', bedArea:'BLU', mutRange:'woche', hireN:12,
-  year:null, kw:null, show:'alle', hb:'', fm:'', zu:'', q:'', sortK:'', sortD:1, focus:null, fx:''};
+  year:null, kw:null, det:{}, show:'alle', hb:'', fm:'', zu:'', q:'', sortK:'', sortD:1, focus:null, fx:''};
 try { const s = JSON.parse(lsGet(UIKEY) || '{}'); for (const k of PERSIST) if (s[k] !== undefined) ui[k] = s[k]; } catch (e) {}
 if (location.hash && TABS.some(t => '#' + t.id === location.hash)) ui.tab = location.hash.slice(1);
 const saveUi = () => { const o = {}; for (const k of PERSIST) o[k] = ui[k]; lsSet(UIKEY, JSON.stringify(o)); };
@@ -503,6 +503,26 @@ function extendVt(vt, a, b, mode = 'auto', q = ''){
   else if (n.nearB) extB(); else if (n.nearA) extA(); else out.push({von:n.von, bis:n.bis, q});
   return mergeVt(out);
 }
+/* Partner verknüpfen: alte Paare beider Personen lösen, dann neue gemeinsame Nummer */
+function linkPartner(dd, pid, oid){
+  const p = P(dd, pid); if (!p) return;
+  const o = oid ? P(dd, oid) : null;
+  if (o && p.pa && p.pa === o.pa && dd.personen.filter(y => y.pa === p.pa).length === 2) return;
+  const unlink = x => { if (!x || !x.pa) return; const num = x.pa; x.pa = null; const rest = dd.personen.filter(y => y.pa === num); if (rest.length === 1) rest[0].pa = null; };
+  unlink(p); if (!o) return; unlink(o);
+  const num = Math.max(0, ...dd.personen.map(x => x.pa || 0)) + 1; p.pa = num; o.pa = num;
+}
+/* Feste Gruppe ab Woche t ändern, vergangene Wochen behalten ihre Gruppe */
+function setFixedGroup(dd, pid, g, t){
+  const p = P(dd, pid); if (!p) return; const old = p.g || '', gw = (dd.gw[pid] ||= {});
+  for (let k = 0; k < t; k++) if (share(p.w[k], 'EIC') && gw[k] === undefined) gw[k] = old;
+  for (const k of Object.keys(gw)) if (+k >= t) delete gw[k];
+  p.g = g; p.gq = 'von Hand';
+}
+/* «bis KW»: kleinere Zahl als die Startwoche = nächstes Jahr (z.B. KW 52 bis KW 2) */
+function tFromKw(kw, base){ const yk = ytOf(base), j = d.jahre.find(x => x.y === yk.y); kw = Math.round(+kw); if (!kw || kw < 1) return base;
+  if (kw >= yk.kw) return j.off + Math.min(kw, j.n) - 1;
+  const ny = d.jahre.find(x => x.y === yk.y + 1); return ny ? ny.off + Math.min(kw, ny.n) - 1 : base; }
 /* Bis wann leere Wochen gefüllt werden: bei offenem Vertrag nur bis Ende des Eintrittsjahres */
 function fillOk(vt, t){ const mo = iso(monT(t)), su = iso(addDays(monT(t), 6));
   const c = vt.find(x => (!x.von || x.von <= su) && (!x.bis || x.bis >= mo)); if (!c) return false; if (c.bis) return true;
@@ -536,9 +556,12 @@ function migrate(dd){
     (dd.bereinigt ||= []).push('Bedarf nach Frauen und Männern entfernt: Er war geschätzt. In den Originaldateien gibt es nur Gesamtzahlen. Für 2027 bitte die neue Daten-Datei verwenden.');
     changed = true;
   }
+  let nr = dd.nextRow || 1;
+  for (const arr of [dd.trakt, dd.aufgaben, dd.stunden]) for (const r of arr || []) if (r.id === undefined){ r.id = 'z' + nr++; changed = true; }
+  dd.nextRow = nr;
   if (!dd.bed.EIC) dd.bed.EIC = {F:new Array(dd.T).fill(null), M:new Array(dd.T).fill(null)};
   if (!dd.bed.FRE) dd.bed.FRE = {F:new Array(dd.T).fill(null), M:new Array(dd.T).fill(null)};
-  if (changed){ dd.schema = 4; dd.log.unshift({t:new Date().toISOString(), u:'Programm', x:'Daten auf die neue Version umgestellt'}); }
+  if (changed && (dd.schema || 0) < 4){ dd.schema = 4; dd.log.unshift({t:new Date().toISOString(), u:'Programm', x:'Daten auf die neue Version umgestellt'}); }
   return changed;
 }
 
@@ -575,12 +598,14 @@ function setSave(state, info){
   else if (state === 'error'){ ban.hidden = false; ban.innerHTML = `<b>Speichern hat nicht geklappt.</b><span>${esc(info || '')}</span><button class="btn sm" data-act="retry">Nochmals versuchen</button>`; }
   else ban.hidden = true;
 }
-function commit(msg, fn){
+/* mode: 'now' = sofort neu aufbauen, 'later' = sobald niemand tippt/klickt, 'quiet' = nur Kopfzeile (Text steht schon da) */
+function commit(msg, fn, mode = 'now'){
   if (!d) return;
-  past.push(JSON.stringify(d)); if (past.length > 40) past.shift(); future = [];
+  past.push({snap:JSON.stringify(d), msg}); if (past.length > 40) past.shift(); future = [];
   const user = ui.user || 'ohne Namen';
   const op = dd => { fn(dd); if (msg){ dd.log.unshift({t:new Date().toISOString(), u:user, x:msg}); if (dd.log.length > 5000) dd.log.length = 5000; } };
-  op(d); queueSave({fn:op}); render();
+  op(d); queueSave({fn:op});
+  if (mode === 'now') render(); else if (mode === 'later') renderSoon(); else updUndo();
 }
 function schedule(ms){ clearTimeout(store.timer); store.timer = setTimeout(flush, ms); }
 let askedConnect = false;
@@ -593,7 +618,7 @@ function queueSave(op){
 function merge(cur){
   const fresh = cur.data; migrate(fresh); let lost = 0;
   for (const op of store.pending){ if (op.replace){ lost++; continue; } try { op.fn(fresh); } catch (e) { lost++; } }
-  d = fresh; store.version = cur.version || 0; past = []; future = [];
+  d = fresh; store.version = cur.version || 0; past = []; future = []; store.merged = true;
   toast(`${cur.von || 'Jemand'} hat inzwischen gespeichert. Deine Änderungen wurden dazugenommen${lost ? ` (${lost} Schritt${lost > 1 ? 'e' : ''} nicht möglich)` : ''}.`);
 }
 async function flush(){
@@ -609,6 +634,7 @@ async function flush(){
     await backup(text);
     const sid = Math.random().toString(36).slice(2) + Date.now().toString(36), now = new Date().toISOString();
     const out = {format:'personalplanung', version:store.version + 1, gespeichert:now, von:ui.user || '', sid, data:d};
+    const fchk = await store.fh.getFile(); if (fchk.lastModified !== f.lastModified){ again = 60; return; }
     const w = await store.fh.createWritable(); await w.write(withData(base, bx, out)); await w.close();
     const f2 = await store.fh.getFile(), y = extractData(await f2.text());
     if (y && y.obj && y.obj.sid !== sid && (y.obj.version || 0) <= out.version){ merge(y.obj); again = 300; return; }
@@ -621,7 +647,7 @@ async function flush(){
   } finally {
     store.saving = false;
     if (again) schedule(again); else if (store.pending.length) schedule(300);
-    render();
+    if (store.merged){ store.merged = false; renderSoon(); } else updUndo();
   }
 }
 async function backup(text){
@@ -640,7 +666,7 @@ async function checkRemote(){
     if (!x || !validData(x.obj) || (x.obj.version || 0) === store.version) return;
     d = x.obj.data; store.version = x.obj.version || 0; store.savedAt = x.obj.gespeichert; past = []; future = [];
     if (migrate(d)) queueSave({fn:dd => migrate(dd)});
-    render(); setSave(store.pending.length ? 'pending' : 'saved'); toast(`Neue Änderungen geladen${x.obj.von ? ' (von ' + x.obj.von + ')' : ''}.`);
+    renderSoon(); setSave(store.pending.length ? 'pending' : 'saved'); toast(`Neue Änderungen geladen${x.obj.von ? ' (von ' + x.obj.von + ')' : ''}.`);
   } catch (e) { /* nächster Versuch */ }
 }
 function startPolling(){ clearInterval(pollT); if (store.mode === 'fs') pollT = setInterval(checkRemote, window.PP_POLL || 20000); }
@@ -770,11 +796,11 @@ function stats(){
   const ist = {}, soll = {}, grp = {};
   for (const a of AREAS){ ist[a.c] = {F:z(), M:z(), T:z()}; soll[a.c] = {F:zn(), M:zn(), T:zn()}; }
   for (const g of GROUPS) grp[g.c] = z(); grp[''] = z();
-  const abw = z(), ang = z(), leer = z();
+  const abw = z(), ang = z(), leer = z(), novt = z();
   for (const p of d.personen){ const vt = VT(p);
     for (let t = 0; t < n; t++){
       const c = p.w[t], ic = covers(vt, t);
-      if (c || ic) ang[t]++;
+      if (ic) ang[t]++; else if (c && !ABS.has(c)) novt[t]++;
       if (!c){ if (ic) leer[t]++; continue; }
       if (ABS.has(c)){ abw[t]++; continue; }
       const parts = c.split('/'), s = 1 / parts.length;
@@ -800,7 +826,7 @@ function stats(){
     tot.part[t] = sT; const full = !tot.miss[t].length;
     tot.soll.T[t] = full ? sT : null; tot.soll.F[t] = okF ? sF : null; tot.soll.M[t] = okM ? sM : null;
   }
-  return {ist, soll, grp, abw, ang, leer, tot};
+  return {ist, soll, grp, abw, ang, leer, novt, tot};
 }
 /* Bedarf gesamt als Text: unvollständige Wochen mit * (es fehlt der Bedarf einzelner Bereiche) */
 const missTxt = (st, t) => st.tot.miss[t].map(a => AREA[a].k).join(', ');
@@ -831,7 +857,9 @@ function issues(){
       for (const c of vt){ const a = c.von ? tOfDateC(c.von) : 0, b = c.bis ? tOfDateC(c.bis) : d.T;
         for (let t = Math.max(0, a + 1); t <= Math.min(b - 1, H); t++) if (!p.w[t]) gaps.push(t); }
       if (gaps.length) out.push({k:'gap', p, ts:gaps, txt:`${gaps.length} ${gaps.length === 1 ? 'Woche' : 'Wochen'} ohne Eintrag: ${rangesTxt(gaps)}. Zählt als angestellt, aber nicht als eingeplant.`}); }
-    if (p.pa && !d.personen.some(o => o.pa === p.pa && o.id !== p.id)) out.push({k:'pa', p, txt:'Als Paar markiert, aber der Partner steht nicht in der Liste.'});
+    if (p.pa){ const same = d.personen.filter(o => o.pa === p.pa);
+      if (same.length === 1) out.push({k:'pa', p, txt:'Als Paar markiert, aber der Partner steht nicht in der Liste.'});
+      else if (same.length > 2) out.push({k:'pa', p, multi:true, txt:`${same.length} Personen haben dieselbe Paar-Nummer (${same.filter(o => o !== p).map(name).join(', ')}). Bitte den richtigen Partner wählen.`}); }
     if (!vt.length && !p.w.some(Boolean)) out.push({k:'leer', p, txt:'Weder Vertrag noch eingeplante Woche. Vielleicht eine alte oder eine vorbereitete Zeile.'});
   }
   return out;
@@ -844,7 +872,7 @@ function renderChrome(st){
   const t = tNow(); $('#kw-date').textContent = weekDates(t);
   $('#kw-today').hidden = t === todayT();
   $('#yr-sel').innerHTML = d.jahre.map(j => `<option value="${j.y}"${j.y === ui.year ? ' selected' : ''}>${j.y}</option>`).join('');
-  $('#b-undo').disabled = !past.length; $('#b-redo').disabled = !future.length;
+  updUndo();
   $('#b-who').textContent = ui.user || 'Name eintragen';
   let s = '';
   if (ui.tab === 'personal') s = `KW ${ui.kw} · angestellt ${st.ang[t]} · eingeplant ${fmt(st.tot.ist.T[t])} (Frauen ${fmt(st.tot.ist.F[t])}, Männer ${fmt(st.tot.ist.M[t])}) · abwesend ${st.abw[t]} · ohne Eintrag ${st.leer[t]}`;
@@ -862,8 +890,23 @@ const HINTS = {
 function setFx(t){ $('#fx').innerHTML = t || `<span class="muted">${esc(HINTS[ui.tab])}</span>`; }
 const charts = {};
 let gridRows = {};
+/* Neu aufbauen nur, wenn niemand gerade tippt oder klickt; nie ineinander */
+let rendering = false, renderAgain = false, renderWanted = false, pointerIsDown = false;
+function fieldBusy(){ const a = document.activeElement; return !!(a && a.closest && a.closest('input,textarea,select') && a.closest('#view,#drawer,#pop')); }
+function renderSoon(){ renderWanted = true; setTimeout(maybeRender, 0); }
+function maybeRender(){ if (!renderWanted || pointerIsDown || fieldBusy()) return; renderWanted = false; render(); }
+window.addEventListener('pointerdown', () => { pointerIsDown = true; }, true);
+window.addEventListener('pointerup', () => { pointerIsDown = false; setTimeout(maybeRender, 0); }, true);
+document.addEventListener('focusout', () => setTimeout(maybeRender, 0));
+function updUndo(){ $('#b-undo').disabled = !past.length; $('#b-redo').disabled = !future.length; }
 function render(){
   if (!d) return;
+  if (rendering){ renderAgain = true; return; }
+  rendering = true; renderWanted = false;
+  try { renderNow(); } finally { rendering = false; }
+  if (renderAgain){ renderAgain = false; setTimeout(render, 0); }
+}
+function renderNow(){
   const v = $('#view'), gw = v.querySelector('.gridwrap'), sh = v.querySelector('.sheet');
   const keep = {gl:gw ? gw.scrollLeft : null, gt:gw ? gw.scrollTop : 0, st:sh ? sh.scrollTop : 0, key:v.dataset.curKey};
   const st = stats(); renderChrome(st);
@@ -940,8 +983,8 @@ function personalRows(){
     if (ui.zu && p.zu !== ui.zu) return false;
     const c = p.w[t];
     switch (ui.show){
-      case 'jahr': return wk.some(x => employed(p, x));
-      case 'angestellt': return employed(p, t);
+      case 'jahr': return wk.some(x => inContract(p, x));
+      case 'angestellt': return inContract(p, t);
       case 'da': return !!c && !ABS.has(c);
       case 'abwesend': return ABS.has(c);
       case 'leer': return inContract(p, t) && !c;
@@ -1022,7 +1065,7 @@ function vStamm(top, rows){
     <div class="gridwrap"><table class="xl"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }
 function vPruefen(iss){
-  const info = d.bereinigt && d.bereinigt.length ? `<details class="info"${iss.length ? '' : ' open'}><summary><b>Was beim Übernehmen der Excel-Daten bereinigt wurde</b> (${d.bereinigt.length} Punkte)</summary><ul>${d.bereinigt.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : '';
+  const info = d.bereinigt && d.bereinigt.length ? `<details class="info" data-det="info"${(ui.det.info ?? !iss.length) ? ' open' : ''}><summary><b>Was beim Übernehmen der Excel-Daten bereinigt wurde</b> (${d.bereinigt.length} Punkte)</summary><ul>${d.bereinigt.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : '';
   if (!iss.length) return `${info}<div class="panel"><p class="big" style="margin:0">✓ Keine offenen Punkte.</p><p class="xs">Das Programm prüft laufend: fehlende Angaben, eingeplante Wochen ohne Vertrag, Wochen im Vertrag ohne Eintrag und Paare ohne Partner.</p></div>`;
   const acts = x => { const id = x.p.id, hb = x.p.hb ? AREA[x.p.hb].k : 'Hauptbereich';
     switch (x.k){
@@ -1031,7 +1074,7 @@ function vPruefen(iss){
       case 'out': return `<button class="btn sm" data-fix="out-vt|${id}">Vertrag ergänzen</button><button class="btn sm" data-fix="out-clear|${id}">Aus dem Plan nehmen</button>`;
       case 'plan': return `<button class="btn sm" data-fix="plan-ok|${id}|${x.c.von}|${x.c.bis}">Stimmt</button><button class="btn sm" data-fix="plan-undo|${id}|${x.c.von}|${x.c.bis}">${x.c.alt || x.c.altv ? 'Zurücksetzen' : 'Wochen entfernen'}</button><button class="btn sm" data-name="${id}">Anpassen</button>`;
       case 'gap': return `<button class="btn sm" data-fix="gap-fill|${id}"${x.p.hb ? '' : ' disabled'}>Mit ${esc(hb)} füllen</button><button class="btn sm" data-fix="gap-ign|${id}">Ist so richtig</button>`;
-      case 'pa': return `<button class="btn sm" data-fix="pa-clear|${id}">Paar-Markierung entfernen</button>`;
+      case 'pa': return `${x.multi ? `<button class="btn sm" data-name="${id}">Partner wählen</button>` : ''}<button class="btn sm" data-fix="pa-clear|${id}">Paar-Markierung entfernen</button>`;
       case 'grp': return `<button class="btn sm" data-fix="grp-ok|${id}">Stimmt</button><button class="btn sm" data-fix="grp-del|${id}">Gruppe entfernen</button>`;
       case 'leer': return `<button class="btn sm" data-fix="del|${id}">Löschen</button>`;
     } return ''; };
@@ -1055,10 +1098,10 @@ function uUeberblick(st){
   const tile = (lab, val, sub) => `<div class="tile"><span class="lab">${lab}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
   const fmOk = !isN(T.soll.F[t]) && !isN(T.soll.M[t]);
   const tiles = `<div class="tiles">
-    ${tile('Angestellt', st.ang[t], `davon abwesend ${st.abw[t]} · ohne Eintrag ${st.leer[t]}`)}
+    ${tile('Angestellt', st.ang[t], `mit Vertrag · davon abwesend ${st.abw[t]} · ohne Eintrag ${st.leer[t]}${st.novt[t] ? ` · ${st.novt[t]} eingeplant ohne Vertrag` : ''}`)}
     ${tile('Eingeplant', fmt(T.ist.T[t]), `Frauen ${fmt(T.ist.F[t])} · Männer ${fmt(T.ist.M[t])}`)}
     ${tile('Bedarf', totBedTxt(st, t), T.miss[t].length ? `* ohne ${esc(missTxt(st, t))} – dort nicht erfasst` : fmOk ? `Frauen ${fmt(T.soll.F[t])} · Männer ${fmt(T.soll.M[t])}` : 'nur als Gesamtzahl erfasst')}
-    ${tile('Differenz', fmtD(dz(T.ist.T[t], T.soll.T[t])), stTxt(dz(T.ist.T[t], T.soll.T[t])))}
+    ${tile('Differenz', fmtD(dz(T.ist.T[t], T.soll.T[t])), isN(T.soll.T[t]) && T.miss[t].length < AREAS.length ? '<span class="st na">Bedarf nicht für alle Bereiche erfasst</span>' : stTxt(dz(T.ist.T[t], T.soll.T[t])))}
     ${fmOk ? tile('Frauen / Männer', `${fmtD(T.ist.F[t] - T.soll.F[t])} / ${fmtD(T.ist.M[t] - T.soll.M[t])}`, 'Differenz Frauen / Männer')
       : tile('Frauen / Männer', '–', 'Bedarf ist nicht nach Frauen und Männern erfasst. <button class="lnk" data-uview="bedarf">Erfassen</button>')}</div>`;
   const a = ui.chartArea, aName = a === 'ALL' ? 'Gesamtbetrieb' : AREA[a].n;
@@ -1085,6 +1128,7 @@ function uUeberblick(st){
     ${fmY ? grow('Frauen', dif(T.ist.F, T.soll.F), {sub:1, diff:1}) + grow('Männer', dif(T.ist.M, T.soll.M), {sub:1, diff:1}) : ''}
     ${grow('Abwesend (Ferien, Krank, Unfall)', st.abw)}
     ${grow('Angestellt ohne Eintrag', st.leer, {title:'Vertrag, aber in dieser Woche nicht eingeplant – siehe Personal → Prüfen'})}
+    ${WK().some(x => st.novt[x]) ? grow('Eingeplant ohne Vertrag', st.novt, {title:'Im Wochenplan eingetragen, aber kein Vertrag – siehe Personal → Prüfen'}) : ''}
     ${grow('Reserve Krank (Ø 2023–2025)', d.krank, {edit:'krank', title:'So viele waren in dieser Woche im Durchschnitt krank (aus der bisherigen Übersicht)'})}
     ${grow('Differenz nach Reserve Krank', resv, {sum:1, diff:1})}
     ${grow(pj ? `Vorjahr ${pj.y}: angestellt` : `Vorjahr ${ui.year - 1}: Verträge (Mobatime)`, vjArr(st), {byIdx:1})}</tbody></table></div>
@@ -1156,7 +1200,7 @@ function win1(st){
   const rows = AREAS.map(a => { const rq = ws.reduce((n, t) => n + openReq(a.c, t).length, 0);
     return `<tr><th><span class="hbchip k-${a.c}">${a.k}</span>${rq ? `<span class="rq" title="offene Anfrage">Anfrage</span>` : ''}</th>${ws.map(t => cell(a.c, t)).join('')}</tr>`; }).join('');
   const tot = `<tr class="tot"><th>Gesamt</th>${ws.map(t => { const x = dz(st.tot.ist.T[t], st.tot.soll.T[t]); return `<td class="wk"><span class="dc ${cls(x)}" style="display:inline-block" title="${x === null ? 'Bedarf nicht für alle Bereiche erfasst: ' + esc(missTxt(st, t)) : ''}">${x === null ? '–' : Math.abs(x) < 0.05 ? '✓' : fmtD(x)}</span></td>`; }).join('')}</tr>`;
-  const mx = `<div class="mxw"><table class="mx"><thead><tr><th></th>${ws.map(t => `<th class="wk${t === t0 ? ' now' : ''}">KW ${kwT(t)}</th>`).join('')}</tr></thead><tbody>${rows}${tot}</tbody></table></div>`;
+  const mx = `<div class="mxw"><table class="mx"><thead><tr><th></th>${ws.map(t => `<th class="wk${t === t0 ? ' now' : ''}">${kwLbl(t)}</th>`).join('')}</tr></thead><tbody>${rows}${tot}</tbody></table></div>`;
   let focus = '';
   if (f){ const I = st.ist[f.a], S = st.soll[f.a], x = diff(f.a, f.t);
     const gF = dz(I.F[f.t], S.F[f.t]), gM = dz(I.M[f.t], S.M[f.t]);
@@ -1171,9 +1215,12 @@ function win1(st){
           : '<div class="xs">Niemand frei: kein Bereich hat in dieser Woche zu viele Leute. → Fenster 3 «Anstellen».</div>'}` : x === null ? '<div class="xs">Für diese Woche ist kein Bedarf erfasst.</div>' : '<div class="xs">Hier fehlt niemand.</div>'}</div>`; }
   else focus = `<div class="focus"><b>In den nächsten 4 Wochen fehlt nirgends jemand</b> <span class="xs">(soweit der Bedarf erfasst ist).</span></div>`;
   const lent = d.personen.filter(p => p.hb && p.w[t0] && !ABS.has(p.w[t0]) && !p.w[t0].split('/').includes(p.hb));
-  const lentL = `<details><summary>Ausgeliehen in KW ${ui.kw} (${lent.length})</summary>${lent.length ? `<div class="tw"><table class="plain"><tbody>${lent.map(p => `<tr><td>${pLink(p)}</td><td class="xs">${AREA[p.hb].k} → ${esc(areaTxt(p.w[t0]))}</td></tr>`).join('')}</tbody></table></div>` : '<span class="xs">Niemand.</span>'}</details>`;
-  return `<section class="win">${winHead(1, 'Wo fehlen Leute?', `Differenz eingeplant − Bedarf, KW ${kwT(ws[0])}–${kwT(ws[ws.length - 1])}`)}
-    <div class="xs">Rot = es fehlen Leute, gelb = zu viele, – = Bedarf nicht erfasst. Feld anklicken: wer könnte aushelfen?</div>${mx}${focus}${lentL}</section>`;
+  const lentL = `<details data-det="lent"${ui.det.lent ? ' open' : ''}><summary>Ausgeliehen in KW ${ui.kw} (${lent.length})</summary>${lent.length ? `<div class="tw"><table class="plain"><tbody>${lent.map(p => `<tr><td>${pLink(p)}</td><td class="xs">${AREA[p.hb].k} → ${esc(areaTxt(p.w[t0]))}</td></tr>`).join('')}</tbody></table></div>` : '<span class="xs">Niemand.</span>'}</details>`;
+  const allReq = d.anfragen.filter(r => r.st === 'offen').sort((a, b) => a.t - b.t);
+  const reqL = `<details data-det="reqs"${(ui.det.reqs ?? allReq.length > 0) ? ' open' : ''}><summary>Offene Anfragen der Bereiche (${allReq.length})</summary>${allReq.length ? `<div class="tw"><table class="plain"><tbody>${allReq.map(r => `<tr><td><span class="hbchip k-${r.area}">${AREA[r.area].k}</span></td>
+    <td class="xs">${r.n} ${r.fm === 'F' ? 'Frauen' : r.fm === 'M' ? 'Männer' : 'Personen'} · ${rangeLbl(r.t, r.t2 ?? r.t)}${r.text ? ' · ' + esc(r.text) : ''}${r.von ? ' · ' + esc(r.von) : ''}</td><td style="text-align:right"><button class="btn sm" data-act="req-done" data-id="${r.id}">erledigt</button></td></tr>`).join('')}</tbody></table></div>` : '<span class="xs">Keine.</span>'}</details>`;
+  return `<section class="win">${winHead(1, 'Wo fehlen Leute?', `Differenz eingeplant − Bedarf, ${rangeLbl(ws[0], ws[ws.length - 1])}`)}
+    <div class="xs">Rot = es fehlen Leute, gelb = zu viele, – = Bedarf nicht erfasst. Feld anklicken: wer könnte aushelfen?</div>${mx}${focus}${reqL}${lentL}</section>`;
 }
 function win2(){
   const t = tNow(), n = ui.mutRange === 'woche' ? 1 : 4, ts = Array.from({length:n}, (_, i) => t + i).filter(x => x < d.T);
@@ -1184,15 +1231,15 @@ function win2(){
   const li = (p, extra) => `<li>${pLink(p)} <span class="xs">${p.hb ? AREA[p.hb].k : ''}${extra ? ' · ' + extra : ''}</span></li>`;
   const list = (arr, f) => arr.length ? arr.map(f).join('') : '<li class="muted">–</li>';
   const mut = d.mut.filter(m => ts.includes(m.t));
-  const lbl = n === 1 ? `KW ${ui.kw}` : `KW ${kwT(ts[0])}–${kwT(ts[ts.length - 1])}`;
+  const lbl = n === 1 ? kwLbl(t) : rangeLbl(ts[0], ts[ts.length - 1]);
   return `<section class="win">${winHead(2, 'Mutationen', lbl, seg('mut', ui.mutRange, [['woche', 'diese Woche'], ['vier', 'nächste 4 Wochen']]))}
     <div class="lists">
       <div><b class="xs">Eintritte (${ein.length})</b><ul>${list(ein.sort(bySort), x => li(x.p, fmtDate(x.s)))}</ul></div>
       <div><b class="xs">Austritte (${aus.length})</b><ul>${list(aus.sort(bySort), x => li(x.p, fmtDate(x.s)))}</ul></div>
       <div><b class="xs">Neu abwesend (${abs.length})</b><ul>${list(abs, x => li(x.p, `${STN[x.c]} ${x.e > x.a ? rangeLbl(x.a, x.e) : kwLbl(x.a)}`))}</ul></div></div>
-    <details${mut.length && mut.length <= 6 ? ' open' : ''}><summary>Notiert in der Mutationsliste (${mut.length})</summary>${mut.length ? `<div class="tw"><table class="plain"><tbody>${mut.map(m => { const p = m.pid ? P(d, m.pid) : null;
-      return `<tr><td class="xs">${esc(m.typ)}</td><td>${p ? pLink(p) : esc(m.name)}</td><td class="xs">${esc(m.bem)}${m.buero ? ' · 1. Bürotag ' + esc(fmtDate(m.buero) || m.buero) : ''}</td><td class="xs">${esc(m.von)}</td><td><button class="del" data-act="mut-del" data-id="${m.id}" aria-label="Eintrag löschen">×</button></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="xs muted">Nichts notiert.</div>'}</details>
-    <details class="noprint"><summary>+ Mutation notieren</summary><div class="toolbar">
+    <details data-det="mutlist"${(ui.det.mutlist ?? (mut.length > 0 && mut.length <= 6)) ? ' open' : ''}><summary>Notiert in der Mutationsliste (${mut.length})</summary>${mut.length ? `<div class="tw"><table class="plain"><tbody>${mut.map(m => { const p = m.pid ? P(d, m.pid) : null;
+      return `<tr><td class="xs">${esc(m.typ)}</td><td>${p ? pLink(p) : esc(m.name)}</td><td class="xs">${esc(m.bem)}${m.buero ? (/^\d{4}-\d\d-\d\d$/.test(m.buero) ? ' · 1. Bürotag ' + esc(fmtDate(m.buero)) : ' · ' + esc(m.buero)) : ''}</td><td class="xs">${esc(m.von)}</td><td><button class="del" data-act="mut-del" data-id="${m.id}" aria-label="Eintrag löschen">×</button></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="xs muted">Nichts notiert.</div>'}</details>
+    <details class="noprint" data-det="mutform"${ui.det.mutform ? ' open' : ''}><summary>+ Mutation notieren</summary><div class="toolbar">
       <label for="mu-typ">Was <select id="mu-typ" class="inp">${MUT_TYPEN.map(x => opt(x, x, 'Absenzen')).join('')}</select></label>
       <label for="mu-p">Person <select id="mu-p" class="inp" style="max-width:220px"><option value="">– wählen –</option>${personOptions('')}</select></label>
       <label for="mu-b" style="flex:1;min-width:160px">Bemerkung <input id="mu-b" class="inp" style="flex:1"></label>
@@ -1215,7 +1262,7 @@ function win3(st){
   else if (fmShort.length === short.length) rec = F && M ? 'Frauen und Männer fehlen – ein Paar passt.' : F ? 'Es fehlen Frauen – eher Frauen anstellen.' : M ? 'Es fehlen Männer – eher Männer anstellen.' : 'Es fehlen Leute.';
   else rec = `Es fehlen Leute. Ob Frauen, Männer oder ein Paar, lässt sich nicht berechnen: Der Bedarf ${short.filter(x => !x.fmKnownW).length === 1 ? 'dieses Bereichs' : 'dieser Bereiche'} ist nur als Gesamtzahl erfasst. <button class="lnk" data-goto-bedarf="${short.find(x => !x.fmKnownW).a.c}">Bedarf nach Frauen und Männern erfassen</button>`;
   const bew = d.bew.filter(b => b.st !== 'angelegt' && b.st !== 'abgesagt'), done = d.bew.length - bew.length;
-  const bewRows = d.bew.length ? d.bew.map(b => `<tr${b.st === 'angelegt' || b.st === 'abgesagt' ? ' class="muted"' : ''}><td>${esc(b.vn)} ${esc(b.nn)}</td><td>${esc(b.fm)}</td><td class="xs">${esc(b.partner)}</td><td class="xs">${b.wunsch ? AREA[b.wunsch].k : ''}${b.ab ? ' ab KW ' + b.ab : ''}</td><td class="xs">${esc(b.bem)}</td>
+  const bewRows = d.bew.length ? d.bew.map(b => `<tr${b.st === 'angelegt' || b.st === 'abgesagt' ? ' class="muted"' : ''}><td>${esc(b.vn)} ${esc(b.nn)}</td><td>${esc(b.fm)}</td><td class="xs">${esc(b.partner)}</td><td class="xs">${b.wunsch ? AREA[b.wunsch].k : ''}${!isN(b.abT) ? ' ab ' + kwLbl(b.abT) : b.ab ? ' ab KW ' + b.ab : ''}</td><td class="xs">${esc(b.bem)}</td>
     <td><select class="inp" data-bew-st="${b.id}" aria-label="Status">${BEW_ST.map(s => opt(s, s, b.st)).join('')}</select></td>
     <td style="white-space:nowrap">${b.st !== 'angelegt' ? `<button class="btn sm" data-act="bew-anlegen" data-id="${b.id}">Anstellen</button>` : ''}<button class="del" data-act="bew-del" data-id="${b.id}" aria-label="Löschen">×</button></td></tr>`).join('')
     : '<tr><td class="muted">Noch keine Bewerbungen.</td></tr>';
@@ -1224,7 +1271,7 @@ function win3(st){
     ${unk.length ? `<div class="xs">Kein Bedarf erfasst für ${ts.length} Wochen: ${unk.map(x => x.a.k).join(', ')}.</div>` : ''}
     <p class="big" style="margin:0">${rec}</p>
     <div><b class="xs">Bewerberliste (${bew.length} offen${done ? `, ${done} erledigt` : ''})</b><div class="tw"><table class="plain"><tbody>${bewRows}</tbody></table></div></div>
-    <details class="noprint"><summary>+ Bewerbung erfassen</summary><div class="toolbar">
+    <details class="noprint" data-det="bewform"${ui.det.bewform ? ' open' : ''}><summary>+ Bewerbung erfassen</summary><div class="toolbar">
       <label for="bw-vn">Vorname <input id="bw-vn" class="inp" style="width:110px"></label><label for="bw-nn">Nachname <input id="bw-nn" class="inp" style="width:120px"></label>
       <label for="bw-fm">F/M <select id="bw-fm" class="inp"><option>F</option><option>M</option></select></label>
       <label for="bw-pa">Partner <input id="bw-pa" class="inp" style="width:120px" placeholder="falls Paar"></label>
@@ -1236,12 +1283,12 @@ function win3(st){
 function win4(){
   const t = tNow(), wn = d.wnotes[t] || {};
   const notes = AREAS.concat([{c:'ALL', n:'Allgemein'}]).map(a => `<label for="wn-${a.c}">${a.n}<textarea id="wn-${a.c}" class="inp" data-wnote="${a.c}" rows="${wn[a.c] ? 3 : 1}">${esc(wn[a.c] || '')}</textarea></label>`).join('');
-  const trak = d.trakt.map((x, i) => `<tr><td data-tedit="trakt|${i}|nr" style="width:40px">${esc(x.nr)}</td><td data-tedit="trakt|${i}|titel">${esc(x.titel)}</td><td data-tedit="trakt|${i}|mod" class="xs">${esc(x.mod)}</td><td data-tedit="trakt|${i}|min" class="xs">${esc(x.min)}</td>
-    <td><button class="del" data-act="trakt-del" data-i="${i}" aria-label="Traktandum löschen">×</button></td></tr>`).join('');
+  const trak = d.trakt.map(x => `<tr><td data-tedit="trakt|${x.id}|nr" style="width:40px">${esc(x.nr)}</td><td data-tedit="trakt|${x.id}|titel">${esc(x.titel)}</td><td data-tedit="trakt|${x.id}|mod" class="xs">${esc(x.mod)}</td><td data-tedit="trakt|${x.id}|min" class="xs">${esc(x.min)}</td>
+    <td><button class="del" data-act="trakt-del" data-id="${x.id}" aria-label="Traktandum löschen">×</button></td></tr>`).join('');
   return `<section class="win">${winHead(4, 'Notizen und Protokoll', `KW ${ui.kw}`)}
     <div class="notes">${notes}</div>
     <label class="xs" for="m-prot">Protokoll der Sitzung</label><textarea id="m-prot" class="inp" rows="6">${esc(d.sitzung[t] || '')}</textarea>
-    <details><summary>Traktandenliste (${d.trakt.length})</summary><div class="tw"><table class="plain"><tbody>${trak}</tbody></table></div>
+    <details data-det="trakt"${ui.det.trakt ? ' open' : ''}><summary>Traktandenliste (${d.trakt.length})</summary><div class="tw"><table class="plain"><tbody>${trak}</tbody></table></div>
       <div class="toolbar noprint" style="margin-top:6px"><button class="btn sm" data-act="trakt-add">+ Traktandum</button><span class="xs">Feld anklicken zum Ändern</span></div></details></section>`;
 }
 
@@ -1340,8 +1387,8 @@ function yearGrid(st){
 function aufgabenView(){
   const cols = [['bereich','Bereich'],['aufgabe','Aufgabe'],['wann','Wann'],['haupt','Hauptverantwortlich'],['t0','Mo'],['t1','Di'],['t2','Mi'],['t3','Do'],['t4','Fr'],['stv1','1. Stellv.'],['stv2','2. Stellv.'],['sommer','Sommer'],['winter','Winter']];
   const val = (r, k) => k[0] === 't' && k.length === 2 ? r.tage[+k[1]] : r[k];
-  const rows = d.aufgaben.map((r, i) => `<tr>${cols.map(([k]) => `<td class="sd${['aufgabe','wann','sommer','winter'].includes(k) ? ' txt' : ''}" data-aedit="${i}|${k}">${esc(val(r, k))}</td>`).join('')}
-    <td><button class="del" data-act="auf-del" data-i="${i}" aria-label="Aufgabe löschen">×</button></td></tr>`).join('');
+  const rows = d.aufgaben.map(r => `<tr>${cols.map(([k]) => `<td class="sd${['aufgabe','wann','sommer','winter'].includes(k) ? ' txt' : ''}" data-aedit="${r.id}|${k}">${esc(val(r, k))}</td>`).join('')}
+    <td><button class="del" data-act="auf-del" data-id="${r.id}" aria-label="Aufgabe löschen">×</button></td></tr>`).join('');
   return `<div class="panel"><h3>Aufgaben Kräuterteam inkl. Logistik</h3><p class="xs" style="margin:0 0 8px">Wer ist hauptverantwortlich, wer vertritt – wie in der bisherigen Aufgabenliste. Feld anklicken zum Ändern.</p>
     <div class="gridwrap auto"><table class="xl"><thead><tr>${cols.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="toolbar" style="margin-top:8px"><button class="btn" data-act="auf-add">+ Aufgabe</button></div></div>`;
@@ -1363,11 +1410,11 @@ function vGemuese(st){
   const t = tNow(), now = t;
   const soll = yr(st.soll.FRE.T), ist = yr(st.ist.FRE.T);
   let body = '';
-  d.stunden.forEach((r, ri) => {
+  d.stunden.forEach(r => { const ri = r.id;
     if (r.abstand){ body += `<tr><td class="lbl" style="height:8px"></td><td colspan="${Y().n + 1}" style="height:8px"></td></tr>`; return; }
     const tot = WK().reduce((a, x) => a + (isN(r.v[x]) ? 0 : +r.v[x]), 0);
-    body += `<tr><td class="lbl${r.gr ? ' g' : ''}"><span data-tedit="stdt|${ri}" style="display:inline-block;min-width:60%">${esc(r.t)}</span>${r.n ? ` <span class="muted">${esc(r.n)}</span>` : ''} <button class="del" data-act="std-del" data-i="${ri}" aria-label="Zeile löschen">×</button></td>`
-      + WK().map(x => `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="std|${ri}|${x}">${r.v[x] ? fmt(r.v[x]) : ''}</td>`).join('')
+    body += `<tr><td class="lbl${r.gr ? ' g' : ''}"><span data-tedit="stdt|${ri}" style="display:inline-block;min-width:60%">${esc(r.t)}</span>${r.n ? ` <span class="muted">${esc(r.n)}</span>` : ''} <button class="del" data-act="std-del" data-id="${ri}" aria-label="Zeile löschen">×</button></td>`
+      + WK().map(x => `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="std|${ri}|${x}">${isN(r.v[x]) || +r.v[x] === 0 ? '' : fmt(r.v[x])}</td>`).join('')
       + `<td class="num" style="font-weight:700">${fmt(tot)}</td></tr>`;
   });
   const jaet = WK().map(x => d.stunden.some(r => r.jaet && r.v && !isN(r.v[x])) ? d.stunden.reduce((a, r) => a + (r.jaet && r.v && !isN(r.v[x]) ? +r.v[x] : 0), 0) : null);
@@ -1414,12 +1461,13 @@ function rangeChoice(o){
   const yk = ytOf(o.base ?? tNow()), kw = yk.kw, n = d.jahre.find(j => j.y === yk.y).n;
   return `<div class="choice">
     <button class="ch-b" data-rng="nur">Nur KW ${kw}${o.nurSmall ? `<small>${esc(o.nurSmall)}</small>` : ''}</button>
-    <div class="ch-row"><span>KW ${kw} bis KW</span><input id="rng-bis" class="inp" type="number" min="${kw}" max="${n}" value="${Math.min(n, kw + 1)}" aria-label="bis KW"><button class="btn sm" data-rng="bis">Übernehmen</button></div>
+    <div class="ch-row"><span>KW ${kw} bis KW</span><input id="rng-bis" class="inp" type="number" min="1" max="53" value="${kw < n ? kw + 1 : 1}" aria-label="bis KW"><button class="btn sm" data-rng="bis">Übernehmen</button></div>
+    ${kw >= 45 ? '<span class="xs">Über Neujahr: kleinere Zahl = nächstes Jahr (z.B. KW 52 bis KW 2).</span>' : ''}
     ${o.ab ? `<button class="ch-b" data-rng="ab">${esc(o.ab)}${o.abSmall ? `<small>${esc(o.abSmall)}</small>` : ''}</button>` : ''}</div>`;
 }
 function weeksFor(mode, bisKw, base = tNow()){ const yk = ytOf(base), n = d.jahre.find(j => j.y === yk.y).n, out = [];
   if (mode === 'nur') return [base];
-  const e = mode === 'bis' ? tOf(yk.y, Math.max(yk.kw, Math.min(n, Math.round(+bisKw) || yk.kw))) : d.T - 1;
+  const e = mode === 'bis' ? Math.max(base, tFromKw(bisKw, base)) : d.T - 1;
   for (let k = base; k <= e; k++) out.push(k); return out; }
 
 /* Verschieben auf dem Kräuter-Brett oder zurück ins Freiland: immer nachfragen, wie lange */
@@ -1431,7 +1479,7 @@ function openMovePop(o){
     : o.from === '' ? 'Noch ohne feste Gruppe.' : `Bisher ${grpName(o.from)}.`;
   let nurSmall = '', ab = '', abSmall = '';
   if ((o.kind === 'act' || o.kind === 'grp') && o.area === 'EIC'){
-    nurSmall = home && home !== o.to ? `ab KW ${kw + 1} wieder ${grpName(home)}` : '';
+    nurSmall = home && home !== o.to && tNow() + 1 < d.T ? `ab ${kwLbl(tNow() + 1)} wieder ${grpName(home)}` : '';
     ab = `Ab KW ${kw} dauerhaft`; abSmall = o.from === '' || !home ? `feste Gruppe: ${toN}` : `neue feste Gruppe statt ${grpName(home)}`; }
   openPop(`${popHead(title)}<div class="pop-sec"><span class="preview">${esc(intro)} Für welche Wochen?</span>${rangeChoice({nurSmall, ab, abSmall})}</div>`, o.anchor, {type:'move', o, onRange:(m, b) => applyMove(o, m, b)});
 }
@@ -1447,31 +1495,28 @@ function applyMove(o, mode, bisKw){
       for (const k of weeks){ const r = ok(p, k); if (!r) continue; if (r === 'set') p.w[k] = X; if (X === 'EIC' && o.to) (dd.gw[o.pid] ||= {})[k] = o.to; } });
     toast(`${nm}: ${toN}, ${lbl}.`); return; }
   if (mode === 'ab'){
-    commit(`${nm}: ab ${kwLbl(t)} fest in ${toN}`, dd => { const p = P(dd, o.pid), old = p.g || '', g = (dd.gw[o.pid] ||= {});
-      if (old) for (let k = 0; k < t; k++) if (share(p.w[k], 'EIC') && g[k] === undefined) g[k] = old;
-      for (const k of Object.keys(g)) if (+k >= t) delete g[k];
-      p.g = o.to; p.gq = 'von Hand'; });
+    commit(`${nm}: ab ${kwLbl(t)} fest in ${toN}`, dd => setFixedGroup(dd, o.pid, o.to, t));
     toast(`${nm} ist ab KW ${ui.kw} fest in ${toN}.`); return; }
   const eic = weeks.filter(k => share(p0.w[k], 'EIC'));
   if (!eic.length){ toast('In diesen Wochen ist die Person nicht bei Eichhof.'); return; }
-  commit(`${nm}: ${toN} ${lbl}`, dd => { const p = P(dd, o.pid);
-    for (const k of eic){ const cur = grpOf(p, k); (dd.gw[o.pid] ||= {})[k] = cur.includes('/') ? [...new Set(cur.split('/').map(x => x === o.from ? o.to : x))].sort().join('/') : o.to; } });
+  commit(`${nm}: ${toN} ${lbl}`, dd => { const p = P(dd, o.pid); if (!p) return; const gw = (dd.gw[o.pid] ||= {});
+    for (const k of weeks){ if (!share(p.w[k], 'EIC')) continue; const cur = gw[k] !== undefined ? gw[k] : (p.g || ''); gw[k] = cur.includes('/') ? [...new Set(cur.split('/').map(x => x === o.from ? o.to : x))].sort().join('/') : o.to; } });
   const last = eic[eic.length - 1];
   toast(`${nm}: ${toN} ${lbl}.${home && home !== o.to && last + 1 < d.T ? ` Ab ${kwLbl(last + 1)} wieder ${grpName(home)}.` : ''}`);
 }
 function openAbsPop(pid, anchor){
   const p = P(d, pid), n = Y().n;
   openPop(`${popHead(`${esc(name(p))}: abwesend`)}<div class="pop-sec"><div class="prow"><label class="xs" for="ab-von">von KW <input id="ab-von" type="number" min="1" max="${n}" value="${ui.kw}"></label>
-    <label class="xs" for="ab-bis">bis KW <input id="ab-bis" type="number" min="1" max="${n}" value="${ui.kw}"></label><span class="xs">${ui.year}</span></div>
+    <label class="xs" for="ab-bis">bis KW <input id="ab-bis" type="number" min="1" max="53" value="${ui.kw}"></label><span class="xs">${ui.year}${ui.kw >= 45 ? ' · kleinere Zahl = nächstes Jahr' : ''}</span></div>
     <div class="absb">${STATUS.map(s => `<button class="k-${s.c}" data-absc="${s.c}">${s.n}</button>`).join('')}</div></div>`, anchor, {type:'abs', pid});
 }
 function applyAbs(pid, c){
-  const v = clampKw($('#ab-von').value), b = Math.max(v, clampKw($('#ab-bis').value)), p0 = P(d, pid), ts = [];
-  for (let k = v; k <= b; k++){ const t = tOf(ui.year, k); if (employed(p0, t)) ts.push(t); }
+  const v = clampKw($('#ab-von').value), t0 = tOf(ui.year, v), e = Math.max(t0, tFromKw($('#ab-bis').value, t0)), p0 = P(d, pid), ts = [];
+  for (let t = t0; t <= e; t++) if (employed(p0, t)) ts.push(t);
   closePop();
   if (!ts.length){ toast('In diesen Wochen hat die Person keinen Vertrag.'); return; }
-  const lbl = rangeLbl(ts[0], ts[ts.length - 1]), skipped = b - v + 1 - ts.length;
-  commit(`${name(p0)}: ${STN[c]} ${lbl}`, dd => { const p = P(dd, pid); for (const t of ts) p.w[t] = c; });
+  const lbl = rangeLbl(ts[0], ts[ts.length - 1]), skipped = e - t0 + 1 - ts.length;
+  commit(`${name(p0)}: ${STN[c]} ${lbl}`, dd => { const p = P(dd, pid); if (p) for (const t of ts) p.w[t] = c; });
   toast(`${name(p0)}: ${STN[c]} ${lbl}${skipped ? ` (${skipped} Wochen ohne Vertrag übersprungen)` : ''}.`);
 }
 function openCardMenu(pid, lane, kind, anchor){
@@ -1499,10 +1544,10 @@ function openAssignPop(pid, from, to, t, anchor){
 function openReqPop(area, anchor){
   const n = Y().n;
   openPop(`${popHead('Leute anfragen')}<div class="pop-sec">
-    <label class="lbl" for="rq-a">Bereich</label><select id="rq-a">${AREAS.map(a => opt(a.c, a.n, area || 'BLU')).join('')}</select>
+    <label class="lbl" for="rq-a">Bereich</label><select id="rq-a"><option value="">– Bereich wählen –</option>${AREAS.map(a => opt(a.c, a.n, area || '')).join('')}</select>
     <div class="prow"><label class="xs" for="rq-n">Anzahl <input id="rq-n" type="number" min="1" max="30" value="1"></label>
       <label class="xs" for="rq-fm">Wer <select id="rq-fm" style="width:auto"><option value="F">Frauen</option><option value="M">Männer</option><option value="X">egal</option></select></label></div>
-    <div class="prow"><label class="xs" for="rq-v">von KW <input id="rq-v" type="number" min="1" max="${n}" value="${ui.kw}"></label><label class="xs" for="rq-b">bis KW <input id="rq-b" type="number" min="1" max="${n}" value="${ui.kw}"></label><span class="xs">${ui.year}</span></div>
+    <div class="prow"><label class="xs" for="rq-v">von KW <input id="rq-v" type="number" min="1" max="${n}" value="${ui.kw}"></label><label class="xs" for="rq-b">bis KW <input id="rq-b" type="number" min="1" max="53" value="${ui.kw}"></label><span class="xs">${ui.year}</span></div>
     <label class="lbl" for="rq-t">Wofür</label><input id="rq-t" placeholder="z.B. Pikieren"></div>
     <div class="pop-f"><span class="preview">Erscheint in der Personalsitzung.</span><span class="sp"></span><button class="btn primary" data-act="req-send">Anfrage senden</button></div>`, anchor, {type:'req'});
 }
@@ -1515,10 +1560,11 @@ function openReqList(area, anchor){
     <div class="pop-f"><span class="preview">Die Personalchefin sieht die Anfragen in der Personalsitzung.</span></div>`, anchor, {type:'reqlist', area});
 }
 function sendReq(){
-  const area = $('#rq-a').value, v = clampKw($('#rq-v').value), b = Math.max(v, clampKw($('#rq-b').value)), n = Math.max(1, +$('#rq-n').value || 1), fm = $('#rq-fm').value, text = $('#rq-t').value.trim();
-  const t1 = tOf(ui.year, v), t2 = tOf(ui.year, b);
+  const area = $('#rq-a').value, v = clampKw($('#rq-v').value), n = Math.max(1, +$('#rq-n').value || 1), fm = $('#rq-fm').value, text = $('#rq-t').value.trim();
+  if (!area){ toast('Bitte den Bereich wählen.'); $('#rq-a').focus(); return; }
+  const t1 = tOf(ui.year, v), t2 = Math.max(t1, tFromKw($('#rq-b').value, t1)), id = Date.now() + Math.floor(Math.random() * 1000);
   closePop();
-  commit(`Anfrage ${AREA[area].k}: ${n} ${fm === 'F' ? 'Frauen' : fm === 'M' ? 'Männer' : 'Personen'} ${rangeLbl(t1, t2)}`, dd => { dd.anfragen.push({id:dd.nextReq++, area, t:t1, t2, fm, n, text, st:'offen', von:ui.user || ''}); });
+  commit(`Anfrage ${AREA[area].k}: ${n} ${fm === 'F' ? 'Frauen' : fm === 'M' ? 'Männer' : 'Personen'} ${rangeLbl(t1, t2)}`, dd => { dd.anfragen.push({id, area, t:t1, t2, fm, n, text, st:'offen', von:ui.user || ''}); });
   toast('Anfrage gesendet. Sie erscheint in der Personalsitzung unter «Wo fehlen Leute?».');
 }
 /* Nach einer Vertragsänderung nachfragen: Wochen ausserhalb entfernen? Neue Wochen füllen? */
@@ -1535,6 +1581,7 @@ function askWeeks(pid, oldVt, newVt){
 }
 function applyWeeks(kind, btn){
   const s = popState, p = P(d, s.pid), sec = btn.closest('.pop-sec');
+  if (!p){ closePop(); return; }
   if (kind === 'rem') commit(`${name(p)}: ${s.rem.length} Wochen ausserhalb des Vertrags aus dem Plan genommen`, dd => { const q = P(dd, s.pid); for (const t of s.rem) q.w[t] = ''; });
   if (kind === 'add') commit(`${name(p)}: ${s.add.length} Wochen mit ${AREA[p.hb].k} gefüllt`, dd => { const q = P(dd, s.pid); for (const t of s.add) if (!q.w[t]) q.w[t] = q.hb; });
   sec.remove();
@@ -1633,23 +1680,31 @@ function moveCard(pid, from, kind, to, anchor){
 const drawer = $('#drawer');
 const vtRow = c => `<div class="vtrow" data-q="${c.q || ''}"><input type="date" class="inp vt-von" value="${esc(c.von || '')}" aria-label="Eintritt"><span>–</span><input type="date" class="inp vt-bis" value="${esc(c.bis || '')}" aria-label="Austritt">${c.q === 'plan' ? '<span class="qplan" title="aus dem Wochenplan abgeleitet – bitte prüfen">aus Plan</span>' : ''}<button type="button" class="del" data-act="vt-del" aria-label="Vertrag entfernen">×</button></div>`;
 const drawerHead = title => popHead(title).replace('data-pop="close"', 'data-drawer="close"');
+let drawerDirty = false, drawerNext = null;
+function absList(p){ const out = []; let cur = null;
+  for (let t = 0; t < d.T; t++){ const c = p.w[t]; if (ABS.has(c)){ if (cur && cur.c === c && cur.t1 === t - 1) cur.t1 = t; else { cur = {c, t0:t, t1:t}; out.push(cur); } } else cur = null; }
+  return out.map(x => `<li>${STN[x.c]}: KW ${kwT(x.t0)}${x.t1 !== x.t0 ? '–' + kwT(x.t1) : ''} ${ytOf(x.t0).y}${x.t1 !== x.t0 && ytOf(x.t1).y !== ytOf(x.t0).y ? '/' + ytOf(x.t1).y : ''}</li>`).join('') || '<li class="muted">Keine Abwesenheiten eingetragen.</li>'; }
+function closeDrawer(next){
+  if (!drawer.hidden && drawerDirty){ drawerNext = next || null; const b = $('#dirty-bar'); if (b){ b.hidden = false; b.scrollIntoView({block:'nearest'}); } return false; }
+  drawer.hidden = true; drawerDirty = false; if (next) next(); return true;
+}
 function openPerson(pid, preset = {}){
-  closePop();
+  if (!drawer.hidden && drawerDirty){ closeDrawer(() => openPerson(pid, preset)); return; }
+  closePop(); drawerDirty = false;
   const isNew = !pid, p = isNew ? {vn:'', nn:'', badge:'', fm:'', fs:'', hb:'', g:'', zu:'ok', fn:'', bem:'', pa:null, ...preset} : P(d, pid);
   const vts = isNew ? (preset.vt || [{von:'', bis:'', q:''}]) : VT(p);
   const partner = isNew ? null : partnerOf(p);
   const notes = isNew ? [] : Object.entries(d.notes).filter(([k]) => k.startsWith(p.id + ':')).map(([k, v]) => [+k.split(':')[1], v]).sort((a, b) => a[0] - b[0]);
-  const absences = isNew ? '' : (() => { const out = []; let cur = null;
-    for (let t = 0; t < d.T; t++){ const c = p.w[t]; if (ABS.has(c)){ if (cur && cur.c === c && cur.t1 === t - 1) cur.t1 = t; else { cur = {c, t0:t, t1:t}; out.push(cur); } } else cur = null; }
-    return out.map(x => `<li>${STN[x.c]}: KW ${kwT(x.t0)}${x.t1 !== x.t0 ? '–' + kwT(x.t1) : ''} ${ytOf(x.t0).y}</li>`).join(''); })();
+  const absences = isNew ? '' : absList(p);
   drawer.innerHTML = `${drawerHead(isNew ? 'Neue Person' : esc(name(p)))}
-    <form class="body" id="f-person"><div class="form">
+    <form class="body" id="f-person"><div id="dirty-bar" class="banner" hidden><b>Änderungen sind noch nicht gespeichert.</b><button type="button" class="btn sm" data-act="dirty-save">Speichern</button><button type="button" class="btn sm" data-act="dirty-drop">Verwerfen</button></div><div class="form">
       <label for="p-vn">Vorname<input class="inp" id="p-vn" value="${esc(p.vn)}" required></label><label for="p-nn">Nachname<input class="inp" id="p-nn" value="${esc(p.nn)}" required></label>
       <label for="p-fm">Frau / Mann<select class="inp" id="p-fm">${opt('', '– wählen –', p.fm)}${opt('F', 'Frau', p.fm)}${opt('M', 'Mann', p.fm)}</select></label>
       <label for="p-hb">Hauptbereich<select class="inp" id="p-hb">${opt('', '– wählen –', p.hb)}${AREAS.map(a => opt(a.c, a.n, p.hb)).join('')}</select></label>
       <div class="full"><div class="lbl2">Verträge – Eintritt und Austritt. Bei mehreren Verträgen (z.B. Frühling und Herbst, neuer AV) je eine Zeile.</div>
-        <div id="vt-list">${vts.map(vtRow).join('')}</div><button type="button" class="btn sm" data-act="vt-add">+ weiterer Vertrag</button></div>
-      <label for="p-g">Gruppe Eichhof<select class="inp" id="p-g"><option value="">–</option>${GROUPS.map(g => opt(g.c, g.n, p.g)).join('')}</select>${p.gq ? `<span class="xs" style="color:var(--fg-3)">Quelle: ${esc(p.gq)}</span>` : ''}</label>
+        <div id="vt-list">${vts.map(vtRow).join('')}</div><button type="button" class="btn sm" data-act="vt-add">+ weiterer Vertrag</button>
+        ${!isNew && (p.ign || {}).gap ? `<div class="full xs" style="margin-top:6px">Wochen ohne Eintrag sind als «richtig» markiert und erscheinen nicht unter Prüfen. <button type="button" class="lnk" data-act="ign-reset" data-p="${p.id}">zurücksetzen</button></div>` : ''}</div>
+      <label for="p-g">Gruppe Eichhof${isNew ? '' : ` <span class="muted">(Änderung gilt ab ${kwLbl(tNow())})</span>`}<select class="inp" id="p-g"><option value="">–</option>${GROUPS.map(g => opt(g.c, g.n, p.g)).join('')}</select>${p.gq ? `<span class="xs" style="color:var(--fg-3)">Quelle: ${esc(p.gq)}</span>` : ''}</label>
       <label for="p-zu">Zustand<select class="inp" id="p-zu">${opt('ok', 'ok', p.zu)}${opt('FA', 'FA (fest angestellt)', p.zu)}${opt('', '–', p.zu)}</select></label>
       <label for="p-badge">Badge<input class="inp" id="p-badge" value="${esc(p.badge)}"></label>
       <label for="p-fs">Führerschein<input class="inp" id="p-fs" value="${esc(p.fs)}"></label>
@@ -1664,7 +1719,7 @@ function openPerson(pid, preset = {}){
         <label for="pa-v">von KW <input id="pa-v" class="inp" type="number" min="1" max="53" value="${ui.kw}" style="width:56px"></label>
         <label for="pa-b">bis KW <input id="pa-b" class="inp" type="number" min="1" max="53" value="${ui.kw}" style="width:56px"></label>
         <button type="button" class="btn" data-act="p-abs" data-p="${p.id}">Eintragen</button></div>
-        <ul class="xs" style="margin:6px 0 0;padding-left:16px">${absences || '<li class="muted">Keine Abwesenheiten eingetragen.</li>'}</ul></div>
+        <ul class="xs" id="abs-list" style="margin:6px 0 0;padding-left:16px">${absences}</ul></div>
       <div class="panel"><h3>Kommentare</h3><ul class="xs" style="margin:0;padding-left:16px">${notes.length ? notes.map(([t, v]) => `<li>KW ${kwT(t)} ${ytOf(t).y}: ${esc(v)}</li>`).join('') : '<li class="muted">Keine Kommentare.</li>'}</ul></div>
       <div class="frow"><button type="button" class="btn" data-act="p-del" data-p="${p.id}">Person löschen</button></div>` : ''}
     </form>`;
@@ -1682,20 +1737,20 @@ function savePerson(){
   if (!f.hb){ toast('Bitte einen Hauptbereich wählen.'); $('#p-hb').focus(); return; }
   if (rows.some(c => c.von && c.bis && c.bis < c.von)){ toast('Bei einem Vertrag liegt der Austritt vor dem Eintritt.'); return; }
   if (!pid && !rows.length){ toast('Bitte mindestens den Eintritt eintragen.'); return; }
-  const vt = mergeVt(rows), label = `${f.vn} ${f.nn}`, old = pid ? VT(P(d, pid)).map(c => ({...c})) : [];
-  const newId = pid || d.nextId;
-  commit(pid ? `${label}: Angaben geändert` : `Neue Person: ${label} (${AREA[f.hb].k}${vt[0] && vt[0].von ? ', ab ' + fmtDate(vt[0].von) : ''})`, dd => {
+  const vt = mergeVt(rows), label = `${f.vn} ${f.nn}`, p0 = pid ? P(d, pid) : null, old = p0 ? VT(p0).map(c => ({...c})) : [];
+  const newId = pid || (100000 + Math.floor(Math.random() * 900000000)), tg = tNow();
+  const gChanged = !!p0 && (p0.g || '') !== f.g, vtChanged = !p0 || JSON.stringify(VT(p0).map(c => [c.von, c.bis])) !== JSON.stringify(vt.map(c => [c.von, c.bis]));
+  const oldPa = p0 ? partnerOf(p0) : null, paChanged = (paId || null) !== (oldPa ? oldPa.id : null);
+  commit(pid ? `${label}: Angaben geändert${gChanged ? ` (Gruppe ab ${kwLbl(tg)})` : ''}` : `Neue Person: ${label} (${AREA[f.hb].k}${vt[0] && vt[0].von ? ', ab ' + fmtDate(vt[0].von) : ''})`, dd => {
     let p;
-    if (pid){ p = P(dd, pid); if (!p) return; if (p.g !== f.g) p.gq = 'von Hand'; Object.assign(p, f); }
-    else { p = {id:dd.nextId++, pa:null, ign:{}, w:new Array(dd.T).fill(''), ...f}; dd.personen.push(p); }
+    if (pid){ p = P(dd, pid); if (!p) return; const {g, ...rest} = f; Object.assign(p, rest); if (gChanged) setFixedGroup(dd, pid, g, tg); }
+    else { if (P(dd, newId)) return; p = {id:newId, pa:null, ign:{}, w:new Array(dd.T).fill(''), ...f, gq:f.g ? 'von Hand' : ''}; dd.personen.push(p); }
     p.vt = vt.map(c => ({...c}));
-    const oldPartner = p.pa ? dd.personen.find(o => o.pa === p.pa && o.id !== p.id) : null;
-    if (paId !== (oldPartner ? oldPartner.id : null)){
-      if (!paId) p.pa = null;
-      else { const o = P(dd, paId); const num = o.pa || (Math.max(0, ...dd.personen.map(x => x.pa || 0)) + 1); o.pa = num; p.pa = num; } }
+    if (vtChanged) p.ign = {...(p.ign || {}), gap:false};
+    if (paChanged) linkPartner(dd, newId, paId);
     if (bewId){ const b = dd.bew.find(x => x.id === bewId); if (b) b.st = 'angelegt'; }
   });
-  drawer.hidden = true;
+  drawer.hidden = true; drawerDirty = false;
   toast(pid ? 'Gespeichert.' : `${label} angelegt.`);
   askWeeks(newId, old, vt);
 }
@@ -1726,40 +1781,42 @@ function copyTable(){
 }
 
 /* ---------- Zahlen und Texte direkt ändern ---------- */
+const RID = (arr, id) => arr.find(x => String(x.id) === String(id));
 function getVal(path){ const p = path.split('|');
-  switch (p[0]){ case 'std': return d.stunden[+p[1]].v[+p[2]]; case 'stdt': return d.stunden[+p[1]].t; case 'grp': return d.bedarfEIC[p[1]][+p[2]];
+  switch (p[0]){ case 'std': return (RID(d.stunden, p[1]) || {v:[]}).v[+p[2]]; case 'stdt': return (RID(d.stunden, p[1]) || {}).t; case 'grp': return d.bedarfEIC[p[1]][+p[2]];
     case 'bed': return d.bed[p[1]][p[2]][+p[3]]; case 'krank': return d.krank[+p[1]];
-    case 'trakt': return d.trakt[+p[1]][p[2]];
-    case 'auf': { const r = d.aufgaben[+p[1]], k = p[2]; return k[0] === 't' && k.length === 2 ? r.tage[+k[1]] : r[k]; } } }
+    case 'trakt': return (RID(d.trakt, p[1]) || {})[p[2]];
+    case 'auf': { const r = RID(d.aufgaben, p[1]) || {tage:[]}, k = p[2]; return k[0] === 't' && k.length === 2 ? r.tage[+k[1]] : r[k]; } } }
 function setVal(dd, path, v){ const p = path.split('|');
-  switch (p[0]){ case 'std': dd.stunden[+p[1]].v[+p[2]] = v; break; case 'stdt': dd.stunden[+p[1]].t = v; break; case 'grp': dd.bedarfEIC[p[1]][+p[2]] = v; break;
+  switch (p[0]){ case 'std': { const r = RID(dd.stunden, p[1]); if (r) r.v[+p[2]] = v; break; } case 'stdt': { const r = RID(dd.stunden, p[1]); if (r) r.t = v; break; } case 'grp': dd.bedarfEIC[p[1]][+p[2]] = v; break;
     case 'bed': { const B = dd.bed[p[1]], t = +p[3]; B[p[2]][t] = v;
       if (B.T && p[2] !== 'T' && !isN(B.F[t]) && !isN(B.M[t])) B.T[t] = r1(+B.F[t] + +B.M[t]); break; }
     case 'krank': dd.krank[+p[1]] = v; break;
-    case 'trakt': dd.trakt[+p[1]][p[2]] = v; break;
-    case 'auf': { const r = dd.aufgaben[+p[1]], k = p[2]; if (k[0] === 't' && k.length === 2) r.tage[+k[1]] = v; else r[k] = v; break; } } }
+    case 'trakt': { const r = RID(dd.trakt, p[1]); if (r) r[p[2]] = v; break; }
+    case 'auf': { const r = RID(dd.aufgaben, p[1]), k = p[2]; if (!r) break; if (k[0] === 't' && k.length === 2) r.tage[+k[1]] = v; else r[k] = v; break; } } }
 const isText = path => ['stdt', 'trakt', 'auf'].includes(path.split('|')[0]);
 function pathLabel(path){ const p = path.split('|');
-  switch (p[0]){ case 'std': return `Stunden «${d.stunden[+p[1]].t}» ${kwLbl(+p[2])}`; case 'stdt': return 'Tätigkeit umbenannt'; case 'grp': return `Bedarf ${GROUP[p[1]].n} ${kwLbl(+p[2])}`;
+  switch (p[0]){ case 'std': return `Stunden «${(RID(d.stunden, p[1]) || {}).t}» ${kwLbl(+p[2])}`; case 'stdt': return 'Tätigkeit umbenannt'; case 'grp': return `Bedarf ${GROUP[p[1]].n} ${kwLbl(+p[2])}`;
     case 'bed': return `Bedarf ${AREA[p[1]].k}${p[2] === 'F' ? ' Frauen' : p[2] === 'M' ? ' Männer' : ''} ${kwLbl(+p[3])}`; case 'krank': return `Reserve Krank ${kwLbl(+p[1])}`;
     case 'trakt': return 'Traktandum geändert'; default: return 'Aufgabe geändert'; } }
 function startEdit(td, path){
   path = path || td.dataset.edit;
   if (td.querySelector('input')) return;
-  const text = isText(path), old = getVal(path);
+  const text = isText(path), old = getVal(path), prevHTML = td.innerHTML;
   td.innerHTML = `<input value="${esc(text ? (old || '') : isN(old) ? '' : String(old).replace('.', ','))}"${text ? '' : ' inputmode="decimal"'} aria-label="Wert" style="${text ? 'min-width:120px;text-align:left' : ''}">`;
   const inp = td.querySelector('input'); inp.focus(); inp.select();
   let done = false;
-  const fin = (ok, next) => { if (done) return; done = true;
+  const fin = (ok, next, blur) => { if (done) return; done = true;
     const raw = inp.value.trim(); let v;
     if (text) v = raw; else { v = raw === '' ? null : Number(raw.replace(',', '.')); if (Number.isNaN(v)){ ok = false; toast('Bitte eine Zahl eintragen oder leer lassen.'); } }
     const same = text ? v === (old || '') : (isN(v) && isN(old)) || (!isN(v) && !isN(old) && v === +old);
-    if (ok && !same) commit(`${pathLabel(path)}: ${text ? v : fmtN(isN(old) ? null : +old) + ' → ' + fmtN(v)}`, dd => setVal(dd, path, v));
-    else render();
+    const change = ok && !same;
+    if (change) commit(`${pathLabel(path)}: ${text ? v : fmtN(isN(old) ? null : +old) + ' → ' + fmtN(v)}`, dd => setVal(dd, path, v), blur ? 'later' : 'now');
+    if (blur || !change){ const show = change ? esc(text ? v : fmtN(v)).replace('–', '') : prevHTML; setTimeout(() => { if (inp.isConnected) td.innerHTML = show; }, 0); }
     if (next){ const nt = document.querySelector(`[data-edit="${next}"]`); if (nt) startEdit(nt); } };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fin(true); } else if (e.key === 'Escape'){ fin(false); }
     else if (e.key === 'Tab' && !text){ e.preventDefault(); const parts = path.split('|'); const tn = Math.max(Y().off, Math.min(Y().off + Y().n - 1, +parts[parts.length - 1] + (e.shiftKey ? -1 : 1))); parts[parts.length - 1] = String(tn); fin(true, parts.join('|')); } });
-  inp.addEventListener('blur', () => fin(true));
+  inp.addEventListener('blur', () => fin(true, null, true));
 }
 function startStammEdit(td){
   if (td.querySelector('input,select')) return;
@@ -1770,33 +1827,61 @@ function startStammEdit(td){
   else if (c.ty === 'vt') td.innerHTML = `<input type="date" value="${esc(cv && cv[k] || '')}" aria-label="${c.n}">`;
   else td.innerHTML = `<input type="text" value="${esc(p[k] || '')}" aria-label="${c.n}">`;
   const inp = td.querySelector('input,select'); inp.focus();
+  const prevHTML = td.innerHTML.includes('<') ? esc(stammVal(p, c)) : td.innerHTML;
   let done = false;
-  const fin = ok => { if (done) return; done = true; const v = inp.value.trim();
-    if (!ok){ render(); return; }
-    if (c.ty === 'partner'){ const o = partnerOf(p); if ((+v || null) === (o ? o.id : null)){ render(); return; }
-      commit(`${name(p)}: Partner ${v ? name(P(d, +v)) : 'entfernt'}`, dd => { const q = P(dd, pid); if (!v) q.pa = null; else { const o2 = P(dd, +v); const num = o2.pa || (Math.max(0, ...dd.personen.map(x => x.pa || 0)) + 1); o2.pa = num; q.pa = num; } }); return; }
-    if (c.ty === 'vt'){ const nv = v || null; if ((cv ? cv[k] : null) === nv){ render(); return; }
+  const fin = (ok, blur) => { if (done) return; done = true; const v = inp.value.trim(), mode = blur ? 'later' : 'now';
+    const restore = () => setTimeout(() => { if (inp.isConnected) td.textContent = stammVal(P(d, pid) || p, c); }, 0);
+    if (!ok){ restore(); return; }
+    if (c.ty === 'partner'){ const o = partnerOf(p); if ((+v || null) === (o ? o.id : null)){ restore(); return; }
+      commit(`${name(p)}: Partner ${v ? name(P(d, +v)) : 'entfernt'}`, dd => linkPartner(dd, pid, +v || null), mode); restore(); return; }
+    if (c.ty === 'vt'){ const nv = v || null; if ((cv ? cv[k] : null) === nv){ restore(); return; }
       const old = VT(p).map(x => ({...x})), vt = old.map(x => ({...x}));
       if (!cv) vt.push({von:k === 'von' ? nv : null, bis:k === 'bis' ? nv : null, q:''}); else { const i = VT(p).indexOf(cv); vt[i][k] = nv; vt[i].q = ''; }
-      if (vt.some(x => x.von && x.bis && x.bis < x.von)){ toast('Der Austritt liegt vor dem Eintritt.'); render(); return; }
-      const nvt = mergeVt(vt);
-      commit(`${name(p)}: ${c.n} → ${nv ? fmtDate(nv) : 'leer'}`, dd => { P(dd, pid).vt = nvt.map(x => ({...x})); });
-      askWeeks(pid, old, nvt); return; }
-    if ((p[k] || '') === v){ render(); return; }
-    commit(`${name(p)}: ${c.n} → ${v || 'leer'}`, dd => { const q = P(dd, pid); q[k] = v; if (k === 'g') q.gq = 'von Hand'; }); };
+      if (vt.some(x => x.von && x.bis && x.bis < x.von)){ toast('Der Austritt liegt vor dem Eintritt.'); restore(); return; }
+      const nvt = mergeVt(vt), cvo = cv ? {von:cv.von, bis:cv.bis} : null;
+      commit(`${name(p)}: ${c.n} → ${nv ? fmtDate(nv) : 'leer'}`, dd => { const q = P(dd, pid); if (!q) return; const list = VT(q).map(x => ({...x}));
+        const m = cvo && list.find(x => x.von === cvo.von && x.bis === cvo.bis); if (m){ m[k] = nv; m.q = ''; } else list.push({von:k === 'von' ? nv : null, bis:k === 'bis' ? nv : null, q:''});
+        q.vt = mergeVt(list); q.ign = {...(q.ign || {}), gap:false}; }, mode);
+      restore(); askWeeks(pid, old, nvt); return; }
+    if ((p[k] || '') === v){ restore(); return; }
+    if (k === 'g'){ const tg = tNow(); commit(`${name(p)}: Gruppe Eichhof → ${v ? grpName(v) : 'keine'} (ab ${kwLbl(tg)})`, dd => setFixedGroup(dd, pid, v, tg), mode); restore(); return; }
+    commit(`${name(p)}: ${c.n} → ${v || 'leer'}`, dd => { const q = P(dd, pid); if (q) q[k] = v; }, mode); restore(); };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fin(true); } else if (e.key === 'Escape') fin(false); });
   inp.addEventListener('change', () => { if (c.ty === 'sel' || c.ty === 'partner') fin(true); });
-  inp.addEventListener('blur', () => fin(true));
+  inp.addEventListener('blur', () => fin(true, true));
 }
 
+const nid = () => 'z' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+/* Vorjahr übernehmen: erst zählen, dann fragen */
+function runCopy(dd, s, mode, write){
+  const {kind, j, pj, area, istS} = s, map = k => pj.off + Math.min(k, pj.n - 1); let n = 0;
+  const pairs = kind === 'std-vj' ? dd.stunden.filter(r => r.v).map(r => [r.v, r.v]) : kind === 'bedeic-vj' ? GROUPS.map(g => [dd.bedarfEIC[g.c], dd.bedarfEIC[g.c]])
+    : ['T','F','M'].filter(k => dd.bed[area][k]).map(k => [dd.bed[area][k], kind === 'bed-vj-ist' ? istS[k] : dd.bed[area][k]]);
+  for (const [tgt, src] of pairs) for (let k = 0; k < j.n; k++){ let sv = src[map(k)]; if (isN(sv)) continue; if (kind === 'bed-vj-ist') sv = r1(sv);
+    const ti = j.off + k; if (mode === 'leer' && !isN(tgt[ti])) continue; if (tgt[ti] !== sv){ if (write) tgt[ti] = sv; n++; } }
+  return n;
+}
+function openCopyPop(kind){
+  const j = Y(), pj = d.jahre.find(x => x.y === ui.year - 1); if (!pj) return;
+  const area = ui.bedArea, s = {type:'copy', kind, j, pj, area, istS:kind === 'bed-vj-ist' ? stats().ist[area] : null};
+  const lab = {['std-vj']:'Stunden Freiland', ['bedeic-vj']:'Bedarf Eichhof (alle Gruppen)', ['bed-vj']:`Bedarf ${AREA[area].k}`, ['bed-vj-ist']:`Eingeplant ${pj.y} als Bedarf ${AREA[area].k}`}[kind];
+  const nLeer = runCopy(d, s, 'leer', false), nAll = runCopy(d, s, 'alle', false), over = nAll - nLeer;
+  if (!nAll){ toast('Es gibt nichts zu übernehmen – die Werte sind schon gleich.'); return; }
+  openPop(`${popHead(`${esc(lab)}: ${pj.y} → ${j.y}`)}<div class="pop-sec"><span>${nLeer} leere Werte in ${j.y} würden gefüllt.${over ? ` ${over} schon eingetragene Werte sind anders als ${pj.y}.` : ''}</span></div>
+    <div class="pop-f" style="flex-wrap:wrap"><button class="btn" data-pop="close">Abbrechen</button><span class="sp"></span>${over ? `<button class="btn" data-act="copy-go" data-mode="alle">Alles übernehmen (${nAll})</button>` : ''}${nLeer ? `<button class="btn primary" data-act="copy-go" data-mode="leer">Nur leere füllen (${nLeer})</button>` : ''}</div>`, null, s);
+}
+function doCopy(s, mode){
+  const lab = {['std-vj']:'Stunden Freiland', ['bedeic-vj']:'Bedarf Eichhof', ['bed-vj']:`Bedarf ${AREA[s.area].k}`, ['bed-vj-ist']:`Bedarf ${AREA[s.area].k} = eingeplant ${s.pj.y}`}[s.kind];
+  commit(`${lab}: ${s.pj.y} → ${s.j.y} übernommen (${mode === 'leer' ? 'nur leere' : 'alle'})`, dd => { runCopy(dd, s, mode, true); });
+}
 /* ---------- Ereignisse ---------- */
-const view = $('#view');
+const view = $('#view'); let qTimer = null;
 function doFix(spec, btn){
   const [k, idS, a, b] = spec.split('|'), id = +idS, p = P(d, id); if (!p) return;
   const x = issues().find(i => i.p.id === id && i.k === k.split('-')[0]);
   switch (k){
     case 'fm': commit(`${name(p)}: ${a === 'F' ? 'Frau' : 'Mann'}`, dd => { P(dd, id).fm = a; }); break;
-    case 'out-vt': if (!x) return; commit(`${name(p)}: Vertrag ergänzt (${rangesTxt(x.ts)})`, dd => { const q = P(dd, id); let vt = VT(q); for (const [s, e] of ranges(x.ts)) vt = extendVt(vt, s, e); q.vt = vt; }); break;
+    case 'out-vt': if (!x) return; commit(`${name(p)}: Vertrag ergänzt (${rangesTxt(x.ts)})`, dd => { const q = P(dd, id); if (!q) return; let vt = VT(q); for (const [s, e] of ranges(x.ts)) vt = extendVt(vt, s, e); q.vt = vt; q.ign = {...(q.ign || {}), gap:false}; }); break;
     case 'out-clear': if (!x) return; commit(`${name(p)}: ${x.ts.length} Wochen ohne Vertrag aus dem Plan genommen`, dd => { const q = P(dd, id); for (const t of x.ts) q.w[t] = ''; }); break;
     case 'plan-ok': commit(`${name(p)}: Vertrag ${fmtDate(a)} – ${fmtDate(b)} bestätigt`, dd => { const c = VT(P(dd, id)).find(v => v.von === a && v.bis === b); if (c){ c.q = ''; delete c.alt; delete c.altv; } }); break;
     case 'plan-undo': { const c0 = VT(p).find(v => v.von === a && v.bis === b); if (!c0) return;
@@ -1805,7 +1890,7 @@ function doFix(spec, btn){
         for (let t = 0; t < dd.T; t++) if (q.w[t] && !covers(VT(q), t)) q.w[t] = ''; }); break; }
     case 'gap-fill': if (!x) return; commit(`${name(p)}: ${x.ts.length} leere Wochen mit ${AREA[p.hb].k} gefüllt`, dd => { const q = P(dd, id); for (const t of x.ts) if (!q.w[t]) q.w[t] = q.hb; }); break;
     case 'gap-ign': commit(`${name(p)}: Wochen ohne Eintrag sind so richtig`, dd => { const q = P(dd, id); q.ign = {...(q.ign || {}), gap:true}; }); break;
-    case 'pa-clear': commit(`${name(p)}: Paar-Markierung entfernt`, dd => { P(dd, id).pa = null; }); break;
+    case 'pa-clear': commit(`${name(p)}: Paar-Markierung entfernt`, dd => linkPartner(dd, id, null)); break;
     case 'grp-ok': commit(`${name(p)}: Gruppe ${grpName(p.g)} bestätigt`, dd => { P(dd, id).gq = 'bestätigt'; }); break;
     case 'grp-del': commit(`${name(p)}: Gruppe ${grpName(p.g)} entfernt`, dd => { const q = P(dd, id); q.g = ''; q.gq = ''; }); break;
     case 'del': if (btn.dataset.armed !== '1'){ btn.dataset.armed = '1'; btn.textContent = 'Wirklich löschen?'; return; }
@@ -1823,7 +1908,7 @@ document.addEventListener('click', e => {
   const cn = t.closest('[data-cn]'); if (cn){ doConnect(cn.dataset.cn); return; }
   if (t.closest('[data-act="import-ok"]')){ doImport(); return; }
   const bn = t.closest('#banner [data-act]'); if (bn){ const a = bn.dataset.act; if (a === 'connect') openConnect(); else if (a === 'download') downloadCopy(); else if (a === 'retry') flush(); return; }
-  if (t.closest('[data-drawer="close"]')){ drawer.hidden = true; return; }
+  if (t.closest('[data-drawer="close"]')){ closeDrawer(); return; }
   if (popState){
     const pk = t.closest('[data-pick]');
     if (pk){ const c = pk.dataset.pick, kind = pk.dataset.kind, s = popState;
@@ -1868,12 +1953,13 @@ document.addEventListener('click', e => {
   else if (a === 'copy') copyTable();
   else if (a === 'print') window.print();
   else if (a === 'filter-reset'){ ui.q = ''; ui.show = 'alle'; ui.hb = ''; ui.fm = ''; ui.zu = ''; render(); }
-  else if (a === 'vt-add') $('#vt-list').insertAdjacentHTML('beforeend', vtRow({}));
-  else if (a === 'vt-del') act.closest('.vtrow').remove();
-  else if (a === 'vt-extend'){ const pid = +act.dataset.p, ts = act.dataset.ts.split(',').map(Number), p = P(d, pid), old = VT(p).map(c => ({...c}));
-    let vt = old; for (const [s, e] of ranges(ts)) vt = extendVt(vt, s, e, act.dataset.mode || 'auto'); closePop();
-    commit(`${name(p)}: Vertrag angepasst (${vt.map(vtTxt).join(', ')})`, dd => { P(dd, pid).vt = vt.map(c => ({...c})); }); toast(`Vertrag: ${vt.map(vtTxt).join(', ')}`); }
-  else if (a === 'bed+' || a === 'bed-'){ const g = act.dataset.g, v = Math.max(0, (grpBed(g, tw) ?? 0) + (a === 'bed+' ? 1 : -1)); commit(`Bedarf ${GROUP[g].n} ${kwLbl(tw)}: ${fmt(v)}`, dd => { dd.bedarfEIC[g][tw] = v; }); }
+  else if (a === 'vt-add'){ $('#vt-list').insertAdjacentHTML('beforeend', vtRow({})); drawerDirty = true; }
+  else if (a === 'vt-del'){ act.closest('.vtrow').remove(); drawerDirty = true; }
+  else if (a === 'vt-extend'){ const pid = +act.dataset.p, ts = act.dataset.ts.split(',').map(Number), p = P(d, pid), mode = act.dataset.mode || 'auto';
+    const calc = list => { let vt = list.map(c => ({...c})); for (const [s, e] of ranges(ts)) vt = extendVt(vt, s, e, mode); return vt; }, vt = calc(VT(p)); closePop();
+    commit(`${name(p)}: Vertrag angepasst (${vt.map(vtTxt).join(', ')})`, dd => { const q = P(dd, pid); if (!q) return; q.vt = calc(VT(q)); q.ign = {...(q.ign || {}), gap:false}; }); toast(`Vertrag: ${vt.map(vtTxt).join(', ')}`); }
+  else if (a === 'bed+' || a === 'bed-'){ const g = act.dataset.g, dl = a === 'bed+' ? 1 : -1, v = Math.max(0, (grpBed(g, tw) ?? 0) + dl);
+    commit(`Bedarf ${GROUP[g].n} ${kwLbl(tw)}: ${fmt(v)}`, dd => { const cur = dd.bedarfEIC[g][tw]; dd.bedarfEIC[g][tw] = Math.max(0, (isN(cur) ? 0 : +cur) + dl); }); }
   else if (a === 'abs-pop') openAbsPop(+act.dataset.p, act);
   else if (a === 'back-pop') openMovePop({pid:+act.dataset.p, from:'', kind:act.dataset.kind, to:'FRE', area:'FRE', anchor:act});
   else if (a === 'note-save'){ const pid = +act.dataset.p, v = $('#pop-note').value.trim(), p = P(d, pid); closePop();
@@ -1886,36 +1972,41 @@ document.addEventListener('click', e => {
   else if (a === 'assign') openAssignPop(+act.dataset.p, act.dataset.from, act.dataset.to, +act.dataset.t, act);
   else if (a === 'mut-add'){ const pid = +$('#mu-p').value || null, typ = $('#mu-typ').value, bem = $('#mu-b').value.trim(), buero = $('#mu-d').value || '', p = pid ? P(d, pid) : null;
     if (!p && !bem){ toast('Bitte Person wählen oder Bemerkung schreiben.'); return; }
-    commit(`Mutation ${typ}${p ? ': ' + name(p) : ''} ${kwLbl(tw)}`, dd => { dd.mut.push({id:dd.nextMut++, t:tw, typ, name:p ? name(p) : '', pid, area:p ? p.hb : '', bem, von:ui.user || '', buero}); }); }
+    const mid = Date.now() + Math.floor(Math.random() * 1000);
+    commit(`Mutation ${typ}${p ? ': ' + name(p) : ''} ${kwLbl(tw)}`, dd => { dd.mut.push({id:mid, t:tw, typ, name:p ? name(p) : '', pid, area:p ? p.hb : '', bem, von:ui.user || '', buero}); }); }
   else if (a === 'mut-del'){ const id = +act.dataset.id; commit('Mutation gelöscht', dd => { dd.mut = dd.mut.filter(m => m.id !== id); }); }
-  else if (a === 'trakt-add') commit('Traktandum hinzugefügt', dd => { dd.trakt.push({nr:(dd.trakt.length + 1) + ')', titel:'Neues Traktandum', mod:'', min:''}); });
-  else if (a === 'trakt-del'){ const i = +act.dataset.i; commit(`Traktandum gelöscht: ${d.trakt[i].titel}`, dd => { dd.trakt.splice(i, 1); }); }
+  else if (a === 'trakt-add'){ const id = nid(); ui.det.trakt = true; commit('Traktandum hinzugefügt', dd => { dd.trakt.push({id, nr:(dd.trakt.length + 1) + ')', titel:'Neues Traktandum', mod:'', min:''}); }); }
+  else if (a === 'trakt-del'){ const id = act.dataset.id, r = RID(d.trakt, id); if (r) commit(`Traktandum gelöscht: ${r.titel}`, dd => { dd.trakt = dd.trakt.filter(x => String(x.id) !== id); }); }
   else if (a === 'bew-add'){ const vn = $('#bw-vn').value.trim(), nn = $('#bw-nn').value.trim(); if (!vn && !nn){ toast('Bitte einen Namen eintragen.'); return; }
-    const b = {vn, nn, fm:$('#bw-fm').value, partner:$('#bw-pa').value.trim(), wunsch:$('#bw-w').value, ab:+$('#bw-ab').value || null, bem:$('#bw-b').value.trim(), st:'neu'};
-    commit(`Bewerbung: ${vn} ${nn}`, dd => { dd.bew.push({id:dd.nextBew++, ...b}); }); }
+    const kw = +$('#bw-ab').value || null, abT = kw ? tFromKw(kw, todayT()) : null, id = Date.now() + Math.floor(Math.random() * 1000);
+    const b = {id, vn, nn, fm:$('#bw-fm').value, partner:$('#bw-pa').value.trim(), wunsch:$('#bw-w').value, ab:kw, abT, bem:$('#bw-b').value.trim(), st:'neu'};
+    commit(`Bewerbung: ${vn} ${nn}`, dd => { dd.bew.push({...b}); }); }
   else if (a === 'bew-del'){ const id = +act.dataset.id; commit('Bewerbung gelöscht', dd => { dd.bew = dd.bew.filter(b => b.id !== id); }); }
   else if (a === 'bew-anlegen'){ const b = d.bew.find(x => x.id === +act.dataset.id);
-    openPerson(null, {vn:b.vn, nn:b.nn, fm:b.fm, hb:b.wunsch || '', vt:[{von:b.ab ? iso(mondayOf(ui.year, b.ab)) : '', bis:'', q:''}], bem:[b.partner ? 'Partner: ' + b.partner : '', b.bem].filter(Boolean).join(' · '), bewId:b.id}); }
-  else if (a === 'auf-add') commit('Aufgabe hinzugefügt', dd => { dd.aufgaben.push({bereich:'', haupt:'', aufgabe:'Neue Aufgabe', wann:'', sommer:'', winter:'', tage:['','','','',''], stv1:'', stv2:''}); });
-  else if (a === 'auf-del'){ const i = +act.dataset.i; commit(`Aufgabe gelöscht: ${d.aufgaben[i].aufgabe}`, dd => { dd.aufgaben.splice(i, 1); }); }
-  else if (a === 'std-add') commit('Tätigkeit hinzugefügt', dd => { dd.stunden.push({t:'Neue Tätigkeit', n:'', gr:false, v:new Array(dd.T).fill(0)}); });
-  else if (a === 'std-del'){ const i = +act.dataset.i; if (act.dataset.armed !== '1'){ act.dataset.armed = '1'; act.textContent = 'löschen?'; return; } commit(`Tätigkeit gelöscht: ${d.stunden[i].t}`, dd => { dd.stunden.splice(i, 1); }); }
-  else if (a === 'std-vj' || a === 'bed-vj' || a === 'bedeic-vj' || a === 'bed-vj-ist'){
-    const j = Y(), pj = d.jahre.find(x => x.y === ui.year - 1); if (!pj) return;
-    const map = k => pj.off + Math.min(k, pj.n - 1);
-    if (a === 'std-vj') commit(`Stunden Freiland ${pj.y} nach ${j.y} übernommen`, dd => { for (const r of dd.stunden) if (r.v) for (let k = 0; k < j.n; k++) r.v[j.off + k] = r.v[map(k)]; });
-    else if (a === 'bedeic-vj') commit(`Bedarf Eichhof ${pj.y} nach ${j.y} übernommen`, dd => { for (const g of GROUPS) for (let k = 0; k < j.n; k++) dd.bedarfEIC[g.c][j.off + k] = dd.bedarfEIC[g.c][map(k)]; });
-    else if (a === 'bed-vj') commit(`Bedarf ${AREA[ui.bedArea].k} ${pj.y} nach ${j.y} übernommen`, dd => { const B = dd.bed[ui.bedArea]; for (const g of Object.keys(B)) for (let k = 0; k < j.n; k++) B[g][j.off + k] = B[g][map(k)]; });
-    else { const st = stats(); commit(`Bedarf ${AREA[ui.bedArea].k} ${j.y} = eingeplant ${pj.y} (gesamt, Frauen, Männer)`, dd => { const B = dd.bed[ui.bedArea], I = st.ist[ui.bedArea];
-      for (let k = 0; k < j.n; k++){ if (B.T) B.T[j.off + k] = r1(I.T[map(k)]); B.F[j.off + k] = r1(I.F[map(k)]); B.M[j.off + k] = r1(I.M[map(k)]); } }); } }
-  else if (a === 'p-abs'){ const pid = +act.dataset.p, c = $('#pa-c').value, y = +$('#pa-y').value, j = d.jahre.find(x => x.y === y), v = Math.max(1, Math.min(j.n, +$('#pa-v').value || 1)), b = Math.max(v, Math.min(j.n, +$('#pa-b').value || v)), p = P(d, pid);
-    commit(`${name(p)}: ${STN[c]} KW ${v}–${b} ${y}`, dd => { const q = P(dd, pid); for (let k = v; k <= b; k++) q.w[j.off + k - 1] = c; }); openPerson(pid); }
+    openPerson(null, {vn:b.vn, nn:b.nn, fm:b.fm, hb:b.wunsch || '', vt:[{von:!isN(b.abT) ? iso(monT(b.abT)) : b.ab ? iso(mondayOf(ui.year, b.ab)) : '', bis:'', q:''}], bem:[b.partner ? 'Partner: ' + b.partner : '', b.bem].filter(Boolean).join(' · '), bewId:b.id}); }
+  else if (a === 'auf-add'){ const id = nid(); commit('Aufgabe hinzugefügt', dd => { dd.aufgaben.push({id, bereich:'', haupt:'', aufgabe:'Neue Aufgabe', wann:'', sommer:'', winter:'', tage:['','','','',''], stv1:'', stv2:''}); }); }
+  else if (a === 'auf-del'){ const id = act.dataset.id, r = RID(d.aufgaben, id); if (r) commit(`Aufgabe gelöscht: ${r.aufgabe}`, dd => { dd.aufgaben = dd.aufgaben.filter(x => String(x.id) !== id); }); }
+  else if (a === 'std-add'){ const id = nid(); commit('Tätigkeit hinzugefügt', dd => { dd.stunden.push({id, t:'Neue Tätigkeit', n:'', gr:false, v:new Array(dd.T).fill(null)}); }); }
+  else if (a === 'std-del'){ const id = act.dataset.id, r = RID(d.stunden, id); if (!r) return; if (act.dataset.armed !== '1'){ act.dataset.armed = '1'; act.textContent = 'löschen?'; return; } commit(`Tätigkeit gelöscht: ${r.t}`, dd => { dd.stunden = dd.stunden.filter(x => String(x.id) !== id); }); }
+  else if (a === 'std-vj' || a === 'bed-vj' || a === 'bedeic-vj' || a === 'bed-vj-ist') openCopyPop(a);
+  else if (a === 'copy-go'){ const s = popState; closePop(); if (s && s.type === 'copy') doCopy(s, act.dataset.mode); }
+  else if (a === 'ign-reset'){ const pid = +act.dataset.p; commit(`${name(P(d, pid))}: Wochen ohne Eintrag wieder prüfen`, dd => { const q = P(dd, pid); if (q) q.ign = {...(q.ign || {}), gap:false}; }, 'later'); const el = act.closest('.full'); if (el) el.remove(); }
+  else if (a === 'dirty-save'){ const next = drawerNext; drawerNext = null; savePerson(); if (drawer.hidden && next) next(); }
+  else if (a === 'dirty-drop'){ const next = drawerNext; drawerNext = null; drawerDirty = false; drawer.hidden = true; if (next) next(); }
+  else if (a === 'p-abs'){ const pid = +act.dataset.p, c = $('#pa-c').value, y = +$('#pa-y').value, j = d.jahre.find(x => x.y === y), v = Math.max(1, Math.min(j.n, +$('#pa-v').value || 1)), p = P(d, pid);
+    const t0 = j.off + v - 1, e = Math.max(t0, tFromKw($('#pa-b').value, t0)), ts = []; for (let t = t0; t <= e; t++) if (employed(p, t)) ts.push(t);
+    if (!ts.length){ toast('In diesen Wochen hat die Person keinen Vertrag.'); return; }
+    const skipped = e - t0 + 1 - ts.length;
+    commit(`${name(p)}: ${STN[c]} ${rangeLbl(ts[0], ts[ts.length - 1])}`, dd => { const q = P(dd, pid); if (q) for (const t of ts) q.w[t] = c; }, 'later');
+    const ul = $('#abs-list'); if (ul) ul.innerHTML = absList(P(d, pid));
+    toast(`${STN[c]} eingetragen: ${rangeLbl(ts[0], ts[ts.length - 1])}${skipped ? ` (${skipped} Wochen ohne Vertrag übersprungen)` : ''}.`); }
   else if (a === 'p-del'){ const pid = +act.dataset.p, p = P(d, pid);
     if (act.dataset.armed !== '1'){ act.dataset.armed = '1'; act.textContent = 'Wirklich löschen? Nochmals klicken'; return; }
     commit(`Person gelöscht: ${name(p)}`, dd => { dd.personen = dd.personen.filter(x => x.id !== pid); delete dd.gw[pid]; }); drawer.hidden = true; }
 });
+document.addEventListener('toggle', e => { const el = e.target; if (el && el.dataset && el.dataset.det) ui.det[el.dataset.det] = el.open; }, true);
 document.addEventListener('submit', e => { if (e.target.id === 'f-person'){ e.preventDefault(); savePerson(); } });
-drawer.addEventListener('input', e => { if (e.target.id === 'log-q') renderLog(e.target.value);
+drawer.addEventListener('input', e => { if (e.target.id === 'log-q') renderLog(e.target.value); if (e.target.closest('#f-person') && !e.target.closest('.panel')) drawerDirty = true;
   const r = e.target.closest('.vtrow'); if (r && r.dataset.q){ r.dataset.q = ''; const b = r.querySelector('.qplan'); if (b) b.remove(); } });
 view.addEventListener('pointerdown', e => {
   const td = e.target.closest('td.c'); if (!td || e.button !== 0) return;
@@ -1938,17 +2029,17 @@ view.addEventListener('mousemove', e => {
 });
 view.addEventListener('mouseleave', () => { tip.hidden = true; });
 view.addEventListener('input', e => { const t = e.target;
-  if (t.id === 'q'){ ui.q = t.value; const pos = t.selectionStart; render(); const q = $('#q'); q.focus(); q.setSelectionRange(pos, pos); } });
+  if (t.id === 'q'){ ui.q = t.value; clearTimeout(qTimer); qTimer = setTimeout(() => { const q0 = $('#q'), pos = q0 ? q0.selectionStart : ui.q.length; render(); const q = $('#q'); if (q){ q.focus(); q.setSelectionRange(pos, pos); } }, 250); } });
 view.addEventListener('change', e => { const t = e.target, tw = tNow();
   if (t.id === 'show'){ ui.show = t.value; render(); }
   else if (t.id === 'hb'){ ui.hb = t.value; render(); }
   else if (t.id === 'fmf'){ ui.fm = t.value; render(); }
   else if (t.id === 'zu'){ ui.zu = t.value; render(); }
-  else if (t.id === 'h-n'){ ui.hireN = Math.max(2, Math.min(40, +t.value || 12)); render(); }
+  else if (t.id === 'h-n'){ ui.hireN = Math.max(2, Math.min(40, +t.value || 12)); renderSoon(); }
   else if (t.id === 'bed-a'){ ui.bedArea = t.value; render(); }
-  else if (t.id === 'std'){ const v = Math.max(20, Math.min(70, +t.value || 52)); commit(`Stunden pro Person: ${v}`, dd => { dd.std = v; }); }
-  else if (t.id === 'm-prot'){ const v = t.value; commit(`Protokoll Personalsitzung ${kwLbl(tw)}`, dd => { dd.sitzung[tw] = v; }); }
-  else if (t.dataset.wnote){ const ar = t.dataset.wnote, v = t.value; commit(`Notiz ${ar === 'ALL' ? 'allgemein' : AREA[ar].k} ${kwLbl(tw)}`, dd => { (dd.wnotes[tw] ||= {})[ar] = v; }); }
+  else if (t.id === 'std'){ const v = Math.max(20, Math.min(70, +t.value || 52)); commit(`Stunden pro Person: ${v}`, dd => { dd.std = v; }, 'later'); }
+  else if (t.id === 'm-prot'){ const v = t.value; commit(`Protokoll Personalsitzung ${kwLbl(tw)}`, dd => { dd.sitzung[tw] = v; }, 'quiet'); }
+  else if (t.dataset.wnote){ const ar = t.dataset.wnote, v = t.value; commit(`Notiz ${ar === 'ALL' ? 'allgemein' : AREA[ar].k} ${kwLbl(tw)}`, dd => { (dd.wnotes[tw] ||= {})[ar] = v; }, 'quiet'); }
   else if (t.dataset.bewSt){ const id = +t.dataset.bewSt, v = t.value; commit(`Bewerbung Status: ${v}`, dd => { const b = dd.bew.find(x => x.id === id); if (b) b.st = v; }); }
   else if (t.dataset.fixhb){ const id = +t.dataset.fixhb, v = t.value, p = P(d, id); if (v) commit(`${name(p)}: Hauptbereich ${AREA[v].k}`, dd => { P(dd, id).hb = v; }); }
 });
@@ -1962,8 +2053,52 @@ $('#kw-prev').onclick = () => d && stepWeek(-1);
 $('#kw-next').onclick = () => d && stepWeek(1);
 $('#kw-today').onclick = () => { if (d){ goT(todayT()); closePop(); render(); } };
 $('#yr-sel').onchange = e => { ui.year = +e.target.value; ui.kw = Math.min(ui.kw, Y().n); closePop(); render(); };
-$('#b-undo').onclick = () => { if (!past.length) return; future.push(JSON.stringify(d)); d = JSON.parse(past.pop()); queueSave({replace:true, fn:() => {}}); render(); toast('Rückgängig gemacht'); };
-$('#b-redo').onclick = () => { if (!future.length) return; past.push(JSON.stringify(d)); d = JSON.parse(future.pop()); queueSave({replace:true, fn:() => {}}); render(); toast('Wiederhergestellt'); };
+/* Rückgängig/Wiederholen als Liste von Änderungen – gilt auch, wenn jemand anderes inzwischen gespeichert hat */
+const clone = x => x === undefined ? undefined : JSON.parse(JSON.stringify(x));
+function diffOps(a, b, path = [], out = []){
+  if (a === b) return out;
+  const isObj = x => x !== null && typeof x === 'object';
+  if (Array.isArray(a) && Array.isArray(b)){
+    const byId = arr => arr.length > 0 && arr.every(x => isObj(x) && !Array.isArray(x) && x.id !== undefined);
+    if ((byId(a) || byId(b)) && (byId(a) || !a.length) && (byId(b) || !b.length)){
+      const ma = new Map(a.map(x => [String(x.id), x])), mb = new Map(b.map(x => [String(x.id), x]));
+      for (const x of a) if (!mb.has(String(x.id))) out.push({op:'del', path, id:x.id});
+      b.forEach((x, i) => { if (!ma.has(String(x.id))) out.push({op:'add', path, item:clone(x), idx:i}); else diffOps(ma.get(String(x.id)), x, [...path, {id:x.id}], out); });
+      return out;
+    }
+    if (a.length === b.length && a.length <= 400){ for (let i = 0; i < a.length; i++) diffOps(a[i], b[i], [...path, i], out); return out; }
+    out.push({op:'set', path, val:clone(b)}); return out;
+  }
+  if (isObj(a) && isObj(b) && !Array.isArray(a) && !Array.isArray(b)){
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])){ if (!path.length && k === 'log') continue;
+      if (!(k in b)) out.push({op:'unset', path:[...path, k]}); else if (!(k in a)) out.push({op:'set', path:[...path, k], val:clone(b[k])}); else diffOps(a[k], b[k], [...path, k], out); }
+    return out;
+  }
+  if (JSON.stringify(a) !== JSON.stringify(b)) out.push({op:'set', path, val:clone(b)});
+  return out;
+}
+function resolvePath(root, path){ let o = root; for (const s of path){ if (o === null || o === undefined) return undefined; o = typeof s === 'object' ? (Array.isArray(o) ? o.find(x => x && String(x.id) === String(s.id)) : undefined) : o[s]; } return o; }
+function applyOps(dd, ops){
+  for (const o of ops){
+    if (o.op === 'add'){ const arr = resolvePath(dd, o.path); if (Array.isArray(arr) && !arr.some(x => x && String(x.id) === String(o.item.id))) arr.splice(Math.min(o.idx, arr.length), 0, clone(o.item)); continue; }
+    if (o.op === 'del'){ const arr = resolvePath(dd, o.path); if (Array.isArray(arr)){ const i = arr.findIndex(x => x && String(x.id) === String(o.id)); if (i >= 0) arr.splice(i, 1); } continue; }
+    const par = o.path.length > 1 ? resolvePath(dd, o.path.slice(0, -1)) : dd, last = o.path[o.path.length - 1];
+    if (par === null || par === undefined || last === undefined) continue;
+    if (typeof last === 'object'){ if (Array.isArray(par)){ const i = par.findIndex(x => x && String(x.id) === String(last.id)); if (i >= 0){ if (o.op === 'set') par[i] = clone(o.val); else par.splice(i, 1); } } }
+    else if (o.op === 'set') par[last] = clone(o.val); else delete par[last];
+  }
+}
+function undoRedo(redo){
+  const src = redo ? future : past; if (!src.length || !d) return;
+  closePop(); drawer.hidden = true; drawerDirty = false;
+  const e = src.pop(), target = JSON.parse(e.snap), ops = diffOps(d, target);
+  (redo ? past : future).push({snap:JSON.stringify(d), msg:e.msg});
+  const msg = `${redo ? 'Wiederholt' : 'Rückgängig'}: ${e.msg || 'Änderung'}`, user = ui.user || 'ohne Namen';
+  const op = dd => { applyOps(dd, ops); dd.log.unshift({t:new Date().toISOString(), u:user, x:msg}); };
+  op(d); queueSave({fn:op}); render(); toast(msg);
+}
+$('#b-undo').onclick = () => undoRedo(false);
+$('#b-redo').onclick = () => undoRedo(true);
 $('#b-log').onclick = () => d && openLog();
 $('#b-who').onclick = () => { if (!d) return;
   openPop(`${popHead('Dein Name')}<div class="pop-sec"><label class="lbl" for="who-in">Erscheint bei jeder Änderung im Verlauf.</label><input id="who-in" value="${esc(ui.user)}"></div><div class="pop-f"><span class="sp"></span><button class="btn primary" data-act="who-save">Speichern</button></div>`, $('#b-who'), {type:'who'});
@@ -1974,8 +2109,10 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !inField){ e.preventDefault(); $('#b-undo').click(); }
   else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')) && !inField){ e.preventDefault(); $('#b-redo').click(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){ e.preventDefault(); if (store.mode === 'fs') flush(); else if (store.mode === 'view') openConnect(); else downloadCopy(); }
-  else if (e.key === 'Escape'){ if (!pop.hidden) closePop(); else if (!drawer.hidden) drawer.hidden = true; }
-  else if (e.key === 'Enter' && !pop.hidden && popState && (popState.type === 'plan' || popState.type === 'kr') && !e.target.closest('textarea')){ e.preventDefault(); applyPop(false); }
+  else if (e.key === 'Escape'){ if (!pop.hidden) closePop(); else if (!drawer.hidden) closeDrawer(); }
+  else if (e.key === 'Enter' && !pop.hidden && e.target.id === 'rng-bis'){ e.preventDefault(); const b = pop.querySelector('[data-rng="bis"]'); if (b) b.click(); }
+  else if (e.key === 'Enter' && !pop.hidden && popState && popState.type === 'req' && e.target.closest('input')){ e.preventDefault(); sendReq(); }
+  else if (e.key === 'Enter' && !pop.hidden && popState && (popState.type === 'plan' || popState.type === 'kr') && !e.target.closest('textarea,button')){ e.preventDefault(); applyPop(false); }
   else if (e.key === 'Enter' && !pop.hidden && popState && popState.type === 'who'){ e.preventDefault(); pop.querySelector('[data-act="who-save"]').click(); }
   else if (e.key === 'Enter' && !pop.hidden && popState && popState.type === 'connect' && e.target.id === 'cn-user'){ e.preventDefault(); const b = pop.querySelector('[data-cn]'); if (b) b.click(); }
 });
