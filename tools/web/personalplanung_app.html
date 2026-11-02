@@ -219,6 +219,18 @@ table.plain td.n{text-align:right}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* ---------- Ergänzungen Arbeitsversion ---------- */
 [hidden]{display:none!important}
+:root{--chart-f:#c3b1e1;--chart-m:#9dc3e6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--chart-f:#8f78bf;--chart-m:#4f80ad}}
+:root[data-theme="dark"]{--chart-f:#8f78bf;--chart-m:#4f80ad}
+.chartbox{max-width:980px}
+svg.ch .barF{fill:var(--chart-f)}
+svg.ch .barM{fill:var(--chart-m)}
+svg.ch .barX{fill:var(--line-2)}
+.sw.f{background:var(--chart-f)}.sw.m{background:var(--chart-m)}.sw.x{background:var(--line-2)}
+.st.na{background:var(--head);color:var(--fg-2);font-weight:400}
+.xl td.na{color:var(--fg-3)}
+.xl td.drv{color:var(--fg-3);font-style:italic}
+.dc.na{background:var(--head);color:var(--fg-3);font-weight:400}
 .xl .st0{width:38px;min-width:38px;max-width:38px;box-sizing:border-box;padding:0 5px 0 2px}
 .xl .st1{left:38px}
 .xl td.out{background-image:repeating-linear-gradient(45deg,transparent 0 4px,var(--hatch) 4px 6px)}
@@ -361,8 +373,8 @@ const AREA = Object.fromEntries(AREAS.map(a => [a.c, a]));
 const STATUS = [{c:'F',n:'Ferien'},{c:'K',n:'Krank'},{c:'U',n:'Unfall'}];
 const STN = Object.fromEntries(STATUS.map(s => [s.c, s.n]));
 const ABS = new Set(['F','K','U']);
-const GROUPS = [{c:'STK',n:'Steckling',fm:'F'},{c:'F10',n:'Fax 10.5er',fm:'F'},{c:'F13',n:'Fax 13er',fm:'F'},
-  {c:'VER',n:'Verteilen / Topf',fm:'M'},{c:'LUC',n:'Luchs',fm:'M'}];
+const GROUPS = [{c:'STK',n:'Steckling'},{c:'F10',n:'Fax 10.5er'},{c:'F13',n:'Fax 13er'},
+  {c:'VER',n:'Verteilen / Topf'},{c:'LUC',n:'Luchs'}];
 const GROUP = Object.fromEntries(GROUPS.map(g => [g.c, g]));
 const TABS = [{id:'personal',n:'Personal'},{id:'uebersicht',n:'Übersicht'},{id:'sitzung',n:'Personalsitzung'},
   {id:'kraeuter',n:'Kräuter Eichhof'},{id:'gemuese',n:'Gemüse Freiland'}];
@@ -376,10 +388,13 @@ const SHOW = [['alle','alle Personen'],['jahr','angestellt im Jahr {Y}'],['anges
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const r1 = x => Math.round((x + Number.EPSILON) * 10) / 10;
+const isN = v => v === null || v === undefined || v === '';
 const fmt = x => { x = r1(x); return String(Math.abs(x) < 1e-9 ? 0 : x).replace('.', ','); };
-const fmtD = x => { x = r1(x); return x > 0 ? '+' + fmt(x) : x < 0 ? '−' + fmt(-x) : '0'; };
-const cls = x => x < -0.5 ? 'bad' : x > 0.5 ? 'warn' : '';
-function stTxt(x){ x = r1(x);
+const fmtN = x => isN(x) ? '–' : fmt(x);
+const fmtD = x => { if (isN(x)) return '–'; x = r1(x); return x > 0 ? '+' + fmt(x) : x < 0 ? '−' + fmt(-x) : '0'; };
+const dz = (a, b) => isN(a) || isN(b) ? null : a - b;
+const cls = x => isN(x) ? 'na' : x < -0.5 ? 'bad' : x > 0.5 ? 'warn' : '';
+function stTxt(x){ if (isN(x)) return '<span class="st na">Bedarf nicht erfasst</span>'; x = r1(x);
   if (x < -0.5) return `<span class="st bad">▼ ${fmt(-x)} ${-x === 1 ? 'fehlt' : 'fehlen'}</span>`;
   if (x > 0.5) return `<span class="st warn">▲ ${fmt(x)} zu viel</span>`;
   return `<span class="st ok">✓ passt</span>`; }
@@ -476,37 +491,36 @@ function fillOk(vt, t){ const mo = iso(monT(t)), su = iso(addDays(monT(t), 6));
 
 /* ---------- Umstellen auf das neue Format und Bereinigen ---------- */
 function migrate(dd){
-  if ((dd.schema || 0) >= 3) return false;
-  let nAv = 0, nPlan = 0, nSplit = 0, nHb = 0;
-  for (const p of dd.personen){
-    p.vn = String(p.vn || '').trim().replace(/\s+/g, ' '); p.nn = String(p.nn || '').trim().replace(/\s+/g, ' ');
-    if (!p.nn && p.vn.includes(' ')){ const parts = p.vn.split(' '); p.nn = parts.pop(); p.vn = parts.join(' '); nSplit++; }
-    let vt = [];
-    if (p.ein || p.aus) vt.push({von:p.ein || null, bis:p.aus || null, q:''});
-    for (const m of String(p.bem || '').matchAll(/AV\s*(\d{1,2}\.\d{1,2}\.\d{2,4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/g)){
-      const von = parseDMY(m[1]), bis = parseDMY(m[2]); if (!von || !bis || bis < von) continue;
-      if (!vt.some(c => c.von === von && c.bis === bis)){ vt.push({von, bis, q:''}); nAv++; } }
-    vt = mergeVt(vt);
-    const blocks = []; let cur = null;
-    for (let t = 0; t < dd.T; t++) if (p.w[t] && !covers(vt, t)){ if (cur && cur.b === t - 1) cur.b = t; else { cur = {a:t, b:t}; blocks.push(cur); } }
-    for (const b of blocks){ vt = extendVt(vt, b.a, b.b, 'auto', 'plan'); nPlan++; }
-    p.vt = mergeVt(vt); delete p.ein; delete p.aus;
-    if (!p.hb){ const cnt = {}; for (const c of p.w) if (c && !ABS.has(c)) for (const a of c.split('/')) cnt[a] = (cnt[a] || 0) + 1;
-      const best = Object.entries(cnt).sort((x, y) => y[1] - x[1])[0]; if (best){ p.hb = best[0]; nHb++; } }
-    p.ign = p.ign || {};
+  let changed = false;
+  if ((dd.schema || 0) < 3){
+    let nAv = 0;
+    for (const p of dd.personen){
+      p.vn = String(p.vn || '').trim().replace(/\s+/g, ' '); p.nn = String(p.nn || '').trim().replace(/\s+/g, ' ');
+      let vt = [];
+      if (p.ein || p.aus) vt.push({von:p.ein || null, bis:p.aus || null, q:''});
+      for (const m of String(p.bem || '').matchAll(/AV\s*(\d{1,2}\.\d{1,2}\.\d{2,4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/g)){
+        const von = parseDMY(m[1]), bis = parseDMY(m[2]); if (!von || !bis || bis < von) continue;
+        if (!vt.some(c => c.von === von && c.bis === bis)){ vt.push({von, bis, q:''}); nAv++; } }
+      p.vt = mergeVt(vt); delete p.ein; delete p.aus; p.ign = p.ign || {};
+    }
+    for (const r of dd.anfragen || []) if (r.t2 === undefined) r.t2 = r.t;
+    for (const l of dd.log || []) if (!l.u && l.r) l.u = l.r;
+    dd.bereinigt = [...(dd.importInfo || []), ...(nAv ? [`${nAv} Verträge aus «AV …» in der Bemerkung übernommen: Dort stand ein neuer Arbeitsvertrag mit Daten, Eintritt/Austritt zeigten noch den alten.`] : [])];
+    delete dd.importInfo; changed = true;
   }
-  for (const r of dd.anfragen || []) if (r.t2 === undefined) r.t2 = r.t;
-  for (const l of dd.log || []) if (!l.u && l.r) l.u = l.r;
-  const items = [];
-  if (nAv) items.push(`${nAv} Verträge aus «AV …» in der Bemerkung übernommen (bisher stand dort nur der erste Vertrag als Eintritt/Austritt).`);
-  if (nPlan) items.push(`${nPlan}-mal war jemand eingeplant, aber ohne Vertrag: Der Vertrag wurde aus dem Wochenplan verlängert oder neu abgeleitet. Bitte unten unter «Vertrag aus dem Wochenplan» bestätigen oder zurücksetzen.`);
-  if (nSplit) items.push(`${nSplit} Namen in Vor- und Nachname getrennt (der ganze Name stand im Feld Vorname).`);
-  if (nHb) items.push(`${nHb} fehlende Hauptbereiche aus dem Wochenplan ergänzt.`);
-  items.push('Mehrfache Leerzeichen in Namen entfernt.');
-  dd.bereinigt = [...(dd.importInfo || []), ...items]; delete dd.importInfo;
-  dd.schema = 3;
-  dd.log.unshift({t:new Date().toISOString(), u:'Programm', x:'Daten auf die neue Version umgestellt und bereinigt (Verträge als Liste, Namen, Hauptbereiche)'});
-  return true;
+  if (dd.soll && !dd.bed){
+    const T = dd.T, nul = () => new Array(T).fill(null);
+    dd.bed = {EIC:{F:nul(), M:nul()}, FRE:{F:nul(), M:nul()}};
+    for (const a of ['JUC','FEL','TOM','BLU','LOG']){ const s = dd.soll[a] || {}; dd.bed[a] = {T:Array.from({length:T}, (_, t) => r1((+(s.F || [])[t] || 0) + (+(s.M || [])[t] || 0))), F:nul(), M:nul()}; }
+    delete dd.soll;
+    for (const r of dd.stunden) if (r.t && r.jaet === undefined) r.jaet = /^(Salat|Fenchel|Kürbis|Zwiebel|Karotten) jäten$/.test(r.t);
+    (dd.bereinigt ||= []).push('Bedarf nach Frauen und Männern entfernt: Er war geschätzt. In den Originaldateien gibt es nur Gesamtzahlen. Für 2027 bitte die neue Daten-Datei verwenden.');
+    changed = true;
+  }
+  if (!dd.bed.EIC) dd.bed.EIC = {F:new Array(dd.T).fill(null), M:new Array(dd.T).fill(null)};
+  if (!dd.bed.FRE) dd.bed.FRE = {F:new Array(dd.T).fill(null), M:new Array(dd.T).fill(null)};
+  if (changed){ dd.schema = 4; dd.log.unshift({t:new Date().toISOString(), u:'Programm', x:'Daten auf die neue Version umgestellt'}); }
+  return changed;
 }
 
 /* ---------- Speichern im Ordner auf dem Netzlaufwerk ---------- */
@@ -662,11 +676,12 @@ window.PP_TEST = {store, flush, checkRemote, get d(){ return d; }};
 /* ---------- Rechnen ---------- */
 const share = (code, a) => { if (!code) return 0; const p = code.split('/'); return p.includes(a) ? 1 / p.length : 0; };
 const grpOf = (p, t) => { const o = d.gw[p.id]; return (o && o[t] !== undefined) ? o[t] : (p.g || ''); };
-const hoursSum = t => d.stunden.reduce((s, r) => s + (r.v ? (+r.v[t] || 0) : 0), 0);
+function hoursAt(t){ let s = 0, any = false; for (const r of d.stunden) if (r.v && !isN(r.v[t])){ s += +r.v[t] || 0; any = true; } return any ? s : null; }
+const grpBed = (g, t) => { const v = d.bedarfEIC[g] ? d.bedarfEIC[g][t] : null; return isN(v) ? null : +v; };
 function stats(){
-  const n = d.T, z = () => new Array(n).fill(0);
+  const n = d.T, z = () => new Array(n).fill(0), zn = () => new Array(n).fill(null);
   const ist = {}, soll = {}, grp = {};
-  for (const a of AREAS){ ist[a.c] = {F:z(), M:z(), T:z()}; soll[a.c] = {F:z(), M:z(), T:z()}; }
+  for (const a of AREAS){ ist[a.c] = {F:z(), M:z(), T:z()}; soll[a.c] = {F:zn(), M:zn(), T:zn()}; }
   for (const g of GROUPS) grp[g.c] = z(); grp[''] = z();
   const abw = z(), ang = z(), leer = z();
   for (const p of d.personen){ const vt = VT(p);
@@ -679,24 +694,36 @@ function stats(){
       for (const a of parts){ const A = ist[a]; if (!A) continue; A.T[t] += s; if (p.fm === 'F') A.F[t] += s; else if (p.fm === 'M') A.M[t] += s;
         if (a === 'EIC'){ const gv = grpOf(p, t); if (!gv) grp[''][t] += s; else { const gp = gv.split('/'); for (const g of gp) if (grp[g]) grp[g][t] += s / gp.length; } } }
     } }
+  /* Bedarf: Gesamtzahl aus den Originaldaten; Frauen/Männer nur, wenn erfasst (sonst null = nicht erfasst) */
   for (let t = 0; t < n; t++){
-    let ef = 0, em = 0; for (const g of GROUPS){ const v = +d.bedarfEIC[g.c][t] || 0; if (g.fm === 'F') ef += v; else em += v; }
-    soll.EIC.F[t] = ef; soll.EIC.M[t] = em;
-    const tot = r1(hoursSum(t) / (d.std || 52)), f = +d.soll.FRE.F[t] || 0;
-    soll.FRE.F[t] = Math.min(f, tot); soll.FRE.M[t] = Math.max(0, r1(tot - f));
-    for (const a of ['JUC','FEL','TOM','BLU','LOG']){ soll[a].F[t] = +d.soll[a].F[t] || 0; soll[a].M[t] = +d.soll[a].M[t] || 0; }
-    for (const a of AREAS) soll[a.c].T[t] = soll[a.c].F[t] + soll[a.c].M[t];
+    let e = null; for (const g of GROUPS){ const v = grpBed(g.c, t); if (v !== null) e = (e || 0) + v; } soll.EIC.T[t] = e;
+    const hh = hoursAt(t); soll.FRE.T[t] = hh === null ? null : r1(hh / (d.std || 52));
+    for (const a of ['JUC','FEL','TOM','BLU','LOG']){ const v = d.bed[a].T[t]; soll[a].T[t] = isN(v) ? null : +v; }
+    for (const a of AREAS){ const S = soll[a.c], T = S.T[t], b = d.bed[a.c] || {}, f = b.F ? b.F[t] : null, m = b.M ? b.M[t] : null;
+      if (T === 0 && isN(f) && isN(m)){ S.F[t] = 0; S.M[t] = 0; continue; }
+      S.F[t] = !isN(f) ? +f : (!isN(m) && T !== null ? Math.max(0, r1(T - m)) : null);
+      S.M[t] = !isN(m) ? +m : (!isN(f) && T !== null ? Math.max(0, r1(T - f)) : null); }
   }
-  const tot = {ist:{F:z(),M:z(),T:z()}, soll:{F:z(),M:z(),T:z()}};
-  for (const a of AREAS) for (const k of ['F','M','T']) for (let t = 0; t < n; t++){ tot.ist[k][t] += ist[a.c][k][t]; tot.soll[k][t] += soll[a.c][k][t]; }
+  const tot = {ist:{F:z(), M:z(), T:z()}, soll:{F:zn(), M:zn(), T:zn()}, part:z(), miss:Array.from({length:n}, () => [])};
+  for (let t = 0; t < n; t++){
+    let sT = 0, sF = 0, sM = 0, okF = true, okM = true;
+    for (const a of AREAS){ for (const k of ['F','M','T']) tot.ist[k][t] += ist[a.c][k][t];
+      const S = soll[a.c]; if (S.T[t] === null) tot.miss[t].push(a.c); else sT += S.T[t];
+      if (S.F[t] === null) okF = false; else sF += S.F[t]; if (S.M[t] === null) okM = false; else sM += S.M[t]; }
+    tot.part[t] = sT; const full = !tot.miss[t].length;
+    tot.soll.T[t] = full ? sT : null; tot.soll.F[t] = okF ? sF : null; tot.soll.M[t] = okM ? sM : null;
+  }
   return {ist, soll, grp, abw, ang, leer, tot};
 }
+/* Bedarf gesamt als Text: unvollständige Wochen mit * (es fehlt der Bedarf einzelner Bereiche) */
+const missTxt = (st, t) => st.tot.miss[t].map(a => AREA[a].k).join(', ');
+function totBedTxt(st, t){ const v = st.tot.soll.T[t]; if (!isN(v)) return fmt(v); return st.tot.miss[t].length < AREAS.length ? fmt(st.tot.part[t]) + '*' : '–'; }
 const series = (st, area, kind, k) => area === 'ALL' ? st.tot[kind][k] : st[kind][area][k];
 const yr = arr => WK().map(t => arr[t]);
 function vjArr(st){ return WK().map(t => { const o = ytOf(t), pj = d.jahre.find(j => j.y === o.y - 1); return pj ? st.ang[pj.off + Math.min(o.kw, pj.n) - 1] : (+d.vj[t] || 0); }); }
 
 /* ---------- Datenprüfung ---------- */
-const ISSUE_T = [['fm','Frau oder Mann fehlt'],['hb','Hauptbereich fehlt'],['out','Eingeplant ohne Vertrag'],['plan','Vertrag aus dem Wochenplan abgeleitet'],
+const ISSUE_T = [['fm','Frau oder Mann fehlt'],['hb','Hauptbereich fehlt'],['grp','Gruppe Eichhof über den Namen zugeordnet'],['out','Eingeplant ohne Vertrag'],['plan','Vertrag aus dem Wochenplan abgeleitet'],
   ['gap','Im Vertrag, aber nicht eingeplant'],['pa','Partner fehlt'],['leer','Ohne Vertrag und ohne eingeplante Woche']];
 function horizonT(){ const o = isoWeek(new Date()); const j = d.jahre.find(x => x.y === o.y) || d.jahre[d.jahre.length - 1]; return j.off + j.n - 1; }
 function issues(){
@@ -705,6 +732,7 @@ function issues(){
     const ign = p.ign || {}, vt = VT(p);
     if (p.fm !== 'F' && p.fm !== 'M') out.push({k:'fm', p, txt:'Ohne diese Angabe fehlt die Person in den Zahlen für Frauen und Männer.'});
     if (!p.hb) out.push({k:'hb', p, txt:'Ohne Hauptbereich weiss niemand, wohin die Person gehört.'});
+    if (p.g && String(p.gq || '').startsWith('Kräuter-Datei')) out.push({k:'grp', p, txt:`Gruppe ${grpName(p.g)}: In der ${p.gq}. Ist das diese Person?`});
     const outside = []; for (let t = 0; t < d.T; t++) if (p.w[t] && !covers(vt, t)) outside.push(t);
     if (outside.length) out.push({k:'out', p, ts:outside, txt:`${outside.length} ${outside.length === 1 ? 'Woche' : 'Wochen'} eingeplant, aber kein Vertrag: ${rangesTxt(outside)}.`});
     vt.forEach(c => { if (c.q !== 'plan') return;
@@ -733,14 +761,14 @@ function renderChrome(st){
   $('#b-who').textContent = ui.user || 'Name eintragen';
   let s = '';
   if (ui.tab === 'personal') s = `KW ${ui.kw} · angestellt ${st.ang[t]} · eingeplant ${fmt(st.tot.ist.T[t])} (Frauen ${fmt(st.tot.ist.F[t])}, Männer ${fmt(st.tot.ist.M[t])}) · abwesend ${st.abw[t]} · ohne Eintrag ${st.leer[t]}`;
-  else if (ui.tab === 'kraeuter') s = `Eichhof KW ${ui.kw} · Bedarf ${fmt(st.soll.EIC.T[t])} · eingeplant ${fmt(st.ist.EIC.T[t])}`;
-  else if (ui.tab === 'gemuese') s = `Freiland KW ${ui.kw} · Bedarf ${fmt(st.soll.FRE.T[t])} · eingeplant ${fmt(st.ist.FRE.T[t])}`;
-  else s = `KW ${ui.kw} · Bedarf ${fmt(st.tot.soll.T[t])} · eingeplant ${fmt(st.tot.ist.T[t])} · Differenz ${fmtD(st.tot.ist.T[t] - st.tot.soll.T[t])}`;
+  else if (ui.tab === 'kraeuter') s = `Eichhof KW ${ui.kw} · Bedarf ${fmtN(st.soll.EIC.T[t])} · eingeplant ${fmt(st.ist.EIC.T[t])}`;
+  else if (ui.tab === 'gemuese') s = `Freiland KW ${ui.kw} · Bedarf ${fmtN(st.soll.FRE.T[t])} · eingeplant ${fmt(st.ist.FRE.T[t])}`;
+  else s = `KW ${ui.kw} · Bedarf ${totBedTxt(st, t)} · eingeplant ${fmt(st.tot.ist.T[t])} · Differenz ${fmtD(dz(st.tot.ist.T[t], st.tot.soll.T[t]))}`;
   $('#status').textContent = s; setFx(ui.fx);
 }
 const HINTS = {
   personal:'Wochen markieren (auch über mehrere Personen ziehen) und Bereich wählen – zwei Bereiche = je halb. Name anklicken = alle Angaben und Verträge. Schraffiert = kein Vertrag.',
-  uebersicht:'Angestellt = mit Vertrag. Eingeplant = arbeitet in der Woche in einem Bereich. Bedarf = so viele Leute braucht die Arbeit. Differenz = eingeplant − Bedarf.',
+  uebersicht:'Angestellt = mit Vertrag. Eingeplant = arbeitet in der Woche in einem Bereich. Bedarf = so viele Leute braucht die Arbeit (aus den Originaldaten als Gesamtzahl). – = nicht erfasst.',
   sitzung:'Die vier Punkte der Sitzung, nach Wichtigkeit. Woche oben links wählen. Auf ein rotes Feld klicken: wer könnte aushelfen?',
   kraeuter:'Karte in eine andere Gruppe ziehen – das Programm fragt dann, wie lange. Grau = diese Woche nicht da. Karte anklicken für Abwesenheit und Kommentar.',
   gemuese:'Stunden pro Tätigkeit und Woche eintragen. Bedarf = Stunden ÷ Stunden pro Person. Unten: Team der Woche und Abwesenheiten.'};
@@ -786,23 +814,27 @@ function legendHTML(){
     <span class="k" style="background-image:repeating-linear-gradient(45deg,transparent 0 4px,var(--hatch) 4px 6px)">kein Vertrag</span></div>`;
 }
 function niceMax(v){ const e = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * e) return m * e; return 10 * e; }
-function chart(id, title, ist, soll, labels = ['eingeplant', 'Bedarf']){
-  const ts = WK(); charts[id] = {title, ist, soll, labels, ts};
+function chart(id, title, f, m, tAll, bed){
+  const ts = WK(); charts[id] = {title, f, m, tAll, bed, ts};
   const W = 640, H = 196, L = 30, R = 6, T = 8, B = 22, pw = W - L - R, ph = H - T - B;
-  const max = niceMax(Math.max(1, ...ist, ...soll) * 1.05), n = ist.length, bw = pw / n;
+  const max = niceMax(Math.max(1, ...tAll, ...bed.filter(v => !isN(v))) * 1.05), n = tAll.length, bw = pw / n;
   const y = v => T + ph - (v / max) * ph, x = i => L + i * bw;
   let s = `<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
   for (let k = 0; k <= 4; k++){ const v = max * k / 4, yy = y(v); s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text x="${L - 4}" y="${yy + 3}" text-anchor="end">${fmt(v)}</text>`; }
   const kw = ui.kw - 1;
   s += `<rect class="kwband" x="${x(kw)}" y="${T}" width="${bw}" height="${ph}"/>`;
-  for (let i = 0; i < n; i++){ const v = ist[i]; if (v <= 0) continue;
-    const x0 = x(i) + 1, x1 = x(i) + bw - 1, yt = y(v), yb = y(0), r = Math.min(3, (x1 - x0) / 2, yb - yt);
-    s += `<path class="bar" d="M${x0} ${yb}V${yt + r}Q${x0} ${yt} ${x0 + r} ${yt}H${x1 - r}Q${x1} ${yt} ${x1} ${yt + r}V${yb}Z"/>`; }
-  s += `<path class="soll" d="${soll.map((v, i) => `${i ? 'L' : 'M'}${(x(i) + bw / 2).toFixed(1)} ${y(v).toFixed(1)}`).join('')}"/>`;
-  s += `<circle class="dot" cx="${x(kw) + bw / 2}" cy="${y(soll[kw] || 0)}" r="4"/>`;
+  let anyX = false;
+  for (let i = 0; i < n; i++){ const x0 = x(i) + 1, w = Math.max(1, bw - 2), rest = Math.max(0, tAll[i] - f[i] - m[i]); let base = 0;
+    for (const [v, c] of [[f[i], 'barF'], [m[i], 'barM'], [rest, 'barX']]){ if (v <= 0.001) continue; if (c === 'barX') anyX = true;
+      s += `<rect class="${c}" x="${x0}" y="${y(base + v)}" width="${w}" height="${Math.max(0, y(base) - y(base + v))}"/>`; base += v; } }
+  let path = '', on = false;
+  bed.forEach((v, i) => { if (isN(v)){ on = false; return; } path += `${on ? 'L' : 'M'}${(x(i) + bw / 2).toFixed(1)} ${y(v).toFixed(1)}`; on = true; });
+  s += `<path class="soll" d="${path}"/>`;
+  if (!isN(bed[kw])) s += `<circle class="dot" cx="${x(kw) + bw / 2}" cy="${y(bed[kw])}" r="4"/>`;
   for (let i = 0; i < n; i += 4) s += `<text x="${x(i) + bw / 2}" y="${H - 6}" text-anchor="middle">${i + 1}</text>`;
   for (let i = 0; i < n; i++) s += `<rect class="hit" data-chart="${id}" data-i="${i}" x="${x(i)}" y="${T}" width="${bw}" height="${ph}"/>`;
-  return `<div class="chart-legend"><span><span class="sw"></span>${labels[0]}</span><span><span class="sw line"></span>${labels[1]}</span><span class="muted">Kalenderwochen ${ui.year}</span></div>${s}</svg>`;
+  const gaps = bed.some(isN);
+  return `<div class="chart-legend"><span><span class="sw f"></span>Frauen eingeplant</span><span><span class="sw m"></span>Männer eingeplant</span>${anyX ? '<span><span class="sw x"></span>ohne F/M-Angabe</span>' : ''}<span><span class="sw line"></span>Bedarf (gesamt)</span>${gaps ? '<span class="muted">Linie fehlt = Bedarf nicht erfasst</span>' : ''}</div>${s}</svg>`;
 }
 function personOptions(sel, filter = () => true){
   return d.personen.filter(filter).slice().sort((a, b) => name(a).localeCompare(name(b), 'de')).map(p => opt(p.id, name(p) + (p.hb ? ` (${AREA[p.hb].k})` : ''), sel)).join('');
@@ -913,6 +945,7 @@ function vPruefen(iss){
       case 'plan': return `<button class="btn sm" data-fix="plan-ok|${id}|${x.c.von}|${x.c.bis}">Stimmt</button><button class="btn sm" data-fix="plan-undo|${id}|${x.c.von}|${x.c.bis}">${x.c.alt || x.c.altv ? 'Zurücksetzen' : 'Wochen entfernen'}</button><button class="btn sm" data-name="${id}">Anpassen</button>`;
       case 'gap': return `<button class="btn sm" data-fix="gap-fill|${id}"${x.p.hb ? '' : ' disabled'}>Mit ${esc(hb)} füllen</button><button class="btn sm" data-fix="gap-ign|${id}">Ist so richtig</button>`;
       case 'pa': return `<button class="btn sm" data-fix="pa-clear|${id}">Paar-Markierung entfernen</button>`;
+      case 'grp': return `<button class="btn sm" data-fix="grp-ok|${id}">Stimmt</button><button class="btn sm" data-fix="grp-del|${id}">Gruppe entfernen</button>`;
       case 'leer': return `<button class="btn sm" data-fix="del|${id}">Löschen</button>`;
     } return ''; };
   let out = '';
@@ -929,61 +962,77 @@ function vUebersicht(st){
   const body = ui.uView === 'bereiche' ? uBereiche(st) : ui.uView === 'bedarf' ? uBedarf(st) : uUeberblick(st);
   return `<div class="sheet gut"><div class="stack">${top}${body}</div></div>`;
 }
+function fmKnown(st, area, ts){ const S = area === 'ALL' ? st.tot.soll : st.soll[area]; return ts.some(t => !isN(S.F[t]) || !isN(S.M[t])); }
 function uUeberblick(st){
   const t = tNow(), T = st.tot, now = t;
   const tile = (lab, val, sub) => `<div class="tile"><span class="lab">${lab}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
+  const fmOk = !isN(T.soll.F[t]) && !isN(T.soll.M[t]);
   const tiles = `<div class="tiles">
     ${tile('Angestellt', st.ang[t], `davon abwesend ${st.abw[t]} · ohne Eintrag ${st.leer[t]}`)}
     ${tile('Eingeplant', fmt(T.ist.T[t]), `Frauen ${fmt(T.ist.F[t])} · Männer ${fmt(T.ist.M[t])}`)}
-    ${tile('Bedarf', fmt(T.soll.T[t]), `Frauen ${fmt(T.soll.F[t])} · Männer ${fmt(T.soll.M[t])}`)}
-    ${tile('Frauen: Differenz', fmtD(T.ist.F[t] - T.soll.F[t]), stTxt(T.ist.F[t] - T.soll.F[t]))}
-    ${tile('Männer: Differenz', fmtD(T.ist.M[t] - T.soll.M[t]), stTxt(T.ist.M[t] - T.soll.M[t]))}</div>`;
+    ${tile('Bedarf', totBedTxt(st, t), T.miss[t].length ? `* ohne ${esc(missTxt(st, t))} – dort nicht erfasst` : fmOk ? `Frauen ${fmt(T.soll.F[t])} · Männer ${fmt(T.soll.M[t])}` : 'nur als Gesamtzahl erfasst')}
+    ${tile('Differenz', fmtD(dz(T.ist.T[t], T.soll.T[t])), stTxt(dz(T.ist.T[t], T.soll.T[t])))}
+    ${fmOk ? tile('Frauen / Männer', `${fmtD(T.ist.F[t] - T.soll.F[t])} / ${fmtD(T.ist.M[t] - T.soll.M[t])}`, 'Differenz Frauen / Männer')
+      : tile('Frauen / Männer', '–', 'Bedarf ist nicht nach Frauen und Männern erfasst. <button class="lnk" data-uview="bedarf">Erfassen</button>')}</div>`;
   const a = ui.chartArea, aName = a === 'ALL' ? 'Gesamtbetrieb' : AREA[a].n;
   const chips = `<div class="chips" role="group" aria-label="Bereich für Grafik">${[{c:'ALL', k:'Gesamtbetrieb'}, ...AREAS].map(x =>
     `<button class="chip ${x.c === 'ALL' ? 'plain' : 'k-' + x.c}" data-chart-area="${x.c}" aria-pressed="${a === x.c}">${x.k}</button>`).join('')}</div>`;
-  const charts2 = `<div class="panel"><div class="toolbar" style="margin-bottom:8px"><h3 style="margin:0">Eingeplant und Bedarf</h3>${chips}</div><div class="cols">
-    <div><h3>Frauen · ${esc(aName)}</h3>${chart('cf', 'Frauen ' + aName, yr(series(st, a, 'ist', 'F')), yr(series(st, a, 'soll', 'F')))}</div>
-    <div><h3>Männer · ${esc(aName)}</h3>${chart('cm', 'Männer ' + aName, yr(series(st, a, 'ist', 'M')), yr(series(st, a, 'soll', 'M')))}</div></div></div>`;
+  const I = a === 'ALL' ? T.ist : st.ist[a], S = a === 'ALL' ? T.soll : st.soll[a];
+  const charts2 = `<div class="panel"><div class="toolbar" style="margin-bottom:8px"><h3 style="margin:0">Eingeplant und Bedarf · ${esc(aName)}</h3>${chips}</div>
+    <div class="chartbox">${chart('cu', 'Eingeplant und Bedarf ' + aName, yr(I.F), yr(I.M), yr(I.T), yr(S.T))}</div></div>`;
   const grow = (lab, arr, o = {}) => `<tr${o.sum ? ' class="sum"' : ''}><td class="lbl${o.sub ? ' sub' : ''}"${o.title ? ` title="${esc(o.title)}"` : ''}>${lab}</td>${WK().map((x, i) => {
-    const v = o.byIdx ? arr[i] : arr[x]; const c = o.diff ? cls(v) : '';
-    if (o.edit) return `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="${o.edit}|${x}">${fmt(v || 0)}</td>`;
-    return `<td class="num ${c}${x === now ? ' kwc' : ''}" data-pick-t="${x}">${o.diff ? (Math.abs(v) < 0.05 ? '·' : fmtD(v)) : fmt(v)}</td>`; }).join('')}</tr>`;
-  const dif = (a1, b1) => a1.map((v, i) => v - b1[i]);
-  const resv = d.krank.map((v, i) => (T.ist.T[i] - T.soll.T[i]) - (+v || 0));
-  const pj = d.jahre.find(j => j.y === ui.year - 1);
-  const gtab = `<div class="panel"><h3>Gesamtbetrieb ${ui.year} <span class="n">· Woche anklicken = auswählen · Reserve Krank kann man ändern</span></h3>
+    const v = arr ? (o.byIdx ? arr[i] : arr[x]) : null, k = x === now ? ' kwc' : '';
+    if (o.edit) return `<td class="num ed${k}" data-edit="${o.edit}|${x}">${isN(v) ? '' : fmt(v)}</td>`;
+    if (o.txt) return `<td class="num${k}" data-pick-t="${x}"${o.tt ? ` title="${esc(o.tt(x))}"` : ''}>${o.txt(x)}</td>`;
+    return `<td class="num ${o.diff ? cls(v) : ''}${k}" data-pick-t="${x}">${o.diff ? (isN(v) ? '–' : Math.abs(v) < 0.05 ? '·' : fmtD(v)) : fmtN(v)}</td>`; }).join('')}</tr>`;
+  const dif = (a1, b1) => a1.map((v, i) => dz(v, b1[i]));
+  const resv = T.ist.T.map((v, i) => dz(dz(v, T.soll.T[i]), isN(d.krank[i]) ? null : +d.krank[i]));
+  const pj = d.jahre.find(j => j.y === ui.year - 1), fmY = fmKnown(st, 'ALL', WK());
+  const gtab = `<div class="panel"><h3>Gesamtbetrieb ${ui.year} <span class="n">· Woche anklicken = auswählen · – = nicht erfasst · * = Bedarf nicht für alle Bereiche erfasst</span></h3>
     <div class="gridwrap auto"><table class="xl">${weekHead('<th class="st0" style="min-width:250px;max-width:none;left:0;text-align:left">Gesamtbetrieb</th>', '<th class="st0" style="left:0"></th>')}<tbody>
     ${grow('Angestellt (mit Vertrag)', st.ang, {sum:1, title:'Alle mit Vertrag in der Woche, auch wer Ferien hat, krank ist oder keinen Eintrag hat'})}
     ${grow('Eingeplant', T.ist.T, {sum:1, title:'Wer in der Woche in einem Bereich arbeitet. Zwei Bereiche = je halb.'})}${grow('Frauen', T.ist.F, {sub:1})}${grow('Männer', T.ist.M, {sub:1})}
-    ${grow('Bedarf', T.soll.T, {sum:1, title:'So viele Leute braucht die Arbeit (Summe aller Bereiche)'})}${grow('Frauen', T.soll.F, {sub:1})}${grow('Männer', T.soll.M, {sub:1})}
-    ${grow('Differenz (eingeplant − Bedarf)', dif(T.ist.T, T.soll.T), {sum:1, diff:1})}${grow('Frauen', dif(T.ist.F, T.soll.F), {sub:1, diff:1})}${grow('Männer', dif(T.ist.M, T.soll.M), {sub:1, diff:1})}
+    ${grow('Bedarf', null, {sum:1, txt:x => totBedTxt(st, x), tt:x => T.miss[x].length ? 'nicht erfasst für: ' + missTxt(st, x) : 'Summe aller Bereiche'})}
+    ${fmY ? grow('Frauen', T.soll.F, {sub:1}) + grow('Männer', T.soll.M, {sub:1}) : ''}
+    ${grow('Differenz (eingeplant − Bedarf)', dif(T.ist.T, T.soll.T), {sum:1, diff:1})}
+    ${fmY ? grow('Frauen', dif(T.ist.F, T.soll.F), {sub:1, diff:1}) + grow('Männer', dif(T.ist.M, T.soll.M), {sub:1, diff:1}) : ''}
     ${grow('Abwesend (Ferien, Krank, Unfall)', st.abw)}
     ${grow('Angestellt ohne Eintrag', st.leer, {title:'Vertrag, aber in dieser Woche nicht eingeplant – siehe Personal → Prüfen'})}
-    ${grow('Reserve Krank (Ø 2023–2025)', d.krank, {edit:'krank', title:'So viele waren in dieser Woche im Durchschnitt krank'})}
+    ${grow('Reserve Krank (Ø 2023–2025)', d.krank, {edit:'krank', title:'So viele waren in dieser Woche im Durchschnitt krank (aus der bisherigen Übersicht)'})}
     ${grow('Differenz nach Reserve Krank', resv, {sum:1, diff:1})}
-    ${grow(pj ? `Vorjahr ${pj.y}: angestellt` : `Vorjahr ${ui.year - 1}: Verträge (Mobatime)`, vjArr(st), {byIdx:1})}</tbody></table></div></div>`;
+    ${grow(pj ? `Vorjahr ${pj.y}: angestellt` : `Vorjahr ${ui.year - 1}: Verträge (Mobatime)`, vjArr(st), {byIdx:1})}</tbody></table></div>
+    ${fmY ? '' : '<p class="xs" style="margin:8px 0 0">Bedarf nach Frauen und Männern: In den Originaldateien steht der Bedarf nur als Gesamtzahl. Sobald er unter «Bedarf eingeben» nach Frauen und Männern erfasst ist, erscheinen hier eigene Zeilen dafür.</p>'}</div>`;
   return tiles + charts2 + gtab;
 }
 function uBereiche(st){
-  const now = tNow(), n = Y().n, dif = (a, b) => a.map((v, i) => v - b[i]);
-  const hrow = (lab, arr, sub) => `<tr><td class="lbl${sub ? ' sub' : ''}">${lab}</td>${WK().map(x => { const v = arr[x]; return `<td class="num ${cls(v)}${x === now ? ' kwc' : ''}" data-pick-t="${x}">${Math.abs(v) < 0.05 ? '·' : fmtD(v)}</td>`; }).join('')}</tr>`;
+  const now = tNow(), n = Y().n;
+  const row = (lab, I, S, sub) => `<tr><td class="lbl${sub ? ' sub' : ''}">${lab}</td>${WK().map(x => { const v = dz(I[x], S[x]);
+    return `<td class="num ${cls(v)}${x === now ? ' kwc' : ''}" data-pick-t="${x}" title="${esc(`${kwLbl(x)}: Bedarf ${fmtN(S[x])}, eingeplant ${fmt(I[x])}`)}">${isN(v) ? '–' : Math.abs(v) < 0.05 ? '·' : fmtD(v)}</td>`; }).join('')}</tr>`;
   let hm = '';
-  for (const ar of AREAS){ hm += `<tr class="sec"><td class="lbl" style="background:var(--${ar.c})">${ar.n}</td><td colspan="${n}"></td></tr>`;
-    hm += hrow('Frauen', dif(st.ist[ar.c].F, st.soll[ar.c].F), 1) + hrow('Männer', dif(st.ist[ar.c].M, st.soll[ar.c].M), 1); }
-  return `<div class="panel"><h3>Differenz pro Bereich (eingeplant − Bedarf) <span class="n">· rot = es fehlen Leute, gelb = zu viele · Klick wählt die Woche</span></h3>
-    <div class="gridwrap auto"><table class="xl">${weekHead('<th class="st0" style="min-width:230px;max-width:none;left:0"></th>', '<th class="st0" style="left:0"></th>')}<tbody>${hm}</tbody></table></div></div>`;
+  for (const ar of AREAS){ const I = st.ist[ar.c], S = st.soll[ar.c];
+    hm += `<tr class="sec"><td class="lbl" style="background:var(--${ar.c})">${ar.n}</td><td colspan="${n}"></td></tr>` + row('gesamt', I.T, S.T, 1);
+    if (fmKnown(st, ar.c, WK())) hm += row('Frauen', I.F, S.F, 1) + row('Männer', I.M, S.M, 1); }
+  return `<div class="panel"><h3>Differenz pro Bereich (eingeplant − Bedarf) <span class="n">· rot = es fehlen Leute, gelb = zu viele, – = Bedarf nicht erfasst · Klick wählt die Woche</span></h3>
+    <div class="gridwrap auto"><table class="xl">${weekHead('<th class="st0" style="min-width:230px;max-width:none;left:0"></th>', '<th class="st0" style="left:0"></th>')}<tbody>${hm}</tbody></table></div>
+    <p class="xs" style="margin:8px 0 0">Frauen/Männer-Zeilen erscheinen bei einem Bereich, sobald sein Bedarf nach Frauen und Männern erfasst ist.</p></div>`;
 }
 function uBedarf(st){
-  const now = tNow(), ba = ui.bedArea, prev = d.jahre.find(j => j.y === ui.year - 1);
-  const opts = [['BLU','Blumen'],['TOM','Tomaten'],['JUC','Kräuter Juch'],['FEL','Kräuter Feld'],['LOG','Logistik'],['FRE','Gemüse Freiland: fixe Frauen']];
-  const brow = (g, lab) => `<tr><td class="lbl">${lab}</td>${WK().map(x => `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="soll|${ba}|${g}|${x}">${fmt(d.soll[ba][g][x] || 0)}</td>`).join('')}</tr>`;
-  const sum = `<tr class="sum"><td class="lbl">Bedarf gesamt</td>${WK().map(x => `<td class="num${x === now ? ' kwc' : ''}">${fmt(st.soll[ba].T[x])}</td>`).join('')}</tr>`;
-  return `<div class="info">Woher der Bedarf kommt: <b>Kräuter Eichhof</b> – Bedarf pro Gruppe im Blatt «Kräuter Eichhof». <b>Gemüse Freiland</b> – Stunden im Blatt «Gemüse Freiland» (davon hier die fixen Frauen). <b>Alle anderen Bereiche</b> – hier eintragen.</div>
+  const now = tNow(), ba = ui.bedArea, prev = d.jahre.find(j => j.y === ui.year - 1), B = d.bed[ba], S = st.soll[ba], fixT = ba === 'EIC' || ba === 'FRE';
+  const cell = (path, raw, shown, ed, x, drv) => `<td class="num${ed ? ' ed' : ''}${drv ? ' drv' : ''}${x === now ? ' kwc' : ''}"${ed ? ` data-edit="${path}"` : ''}>${shown}</td>`;
+  const rowT = `<tr class="sum"><td class="lbl">Bedarf gesamt${fixT ? ` <span class="muted">(aus Blatt ${ba === 'EIC' ? 'Kräuter Eichhof' : 'Gemüse Freiland'})</span>` : ''}</td>${WK().map(x => {
+    const both = !fixT && !isN(B.F[x]) && !isN(B.M[x]);
+    return cell(`bed|${ba}|T|${x}`, null, fixT || both ? fmtN(S.T[x]) : (isN(B.T[x]) ? '' : fmt(B.T[x])), !fixT && !both, x, false); }).join('')}</tr>`;
+  const rowG = (k, lab) => `<tr><td class="lbl">${lab}</td>${WK().map(x => { const v = B[k][x];
+    return isN(v) ? cell(`bed|${ba}|${k}|${x}`, null, isN(S[k][x]) ? '' : fmt(S[k][x]), true, x, !isN(S[k][x])) : cell(`bed|${ba}|${k}|${x}`, null, fmt(v), true, x, false); }).join('')}</tr>`;
+  const opts = AREAS.map(a => [a.c, a.n]);
+  return `<div class="info">Der Bedarf steht in den Originaldateien nur als <b>Gesamtzahl</b> pro Woche. Frauen und Männer sind leer, bis ihr sie hier eintragt.
+    Ist nur «Frauen» eingetragen, ergibt sich «Männer» = Gesamt − Frauen (grau). Sind beide eingetragen, ist Gesamt = Frauen + Männer.
+    Eichhof (Bedarf pro Gruppe) und Freiland (Stunden) werden in ihren Blättern geplant; hier nur die Aufteilung Frauen/Männer.</div>
     <div class="panel"><div class="toolbar"><label for="bed-a">Bereich <select id="bed-a">${opts.map(([c, l]) => opt(c, l, ba)).join('')}</select></label>
-    <span class="xs">Zahl anklicken und neue Zahl tippen · Tab = nächste Woche · Enter = fertig</span><span class="sp"></span>
+    <span class="xs">Zahl anklicken und tippen · leer lassen = nicht erfasst · Tab = nächste Woche · Enter = fertig</span><span class="sp"></span>
     ${prev ? `<button class="btn" data-act="bed-vj">Bedarf ${prev.y} übernehmen</button><button class="btn" data-act="bed-vj-ist">Eingeplant ${prev.y} als Bedarf</button>` : ''}</div>
-    <div class="gridwrap auto" style="margin-top:8px"><table class="xl">${weekHead('<th class="st0" style="min-width:230px;max-width:none;left:0">Personen pro Woche</th>', '<th class="st0" style="left:0"></th>')}<tbody>
-    ${brow('F', ba === 'FRE' ? 'fixe Frauen' : 'Frauen')}${ba !== 'FRE' ? brow('M', 'Männer') : ''}${sum}</tbody></table></div></div>`;
+    <div class="gridwrap auto" style="margin-top:8px"><table class="xl">${weekHead('<th class="st0" style="min-width:250px;max-width:none;left:0">Personen pro Woche</th>', '<th class="st0" style="left:0"></th>')}<tbody>
+    ${rowT}${rowG('F', 'davon Frauen')}${rowG('M', 'davon Männer')}</tbody></table></div></div>`;
 }
 
 /* ---------- Blatt: Personalsitzung (4 Fenster nach Wichtigkeit) ---------- */
@@ -995,47 +1044,49 @@ function vSitzung(st){
     <div class="wins">${win1(st)}${win2()}${win3(st)}${win4()}</div></div></div>`;
 }
 function winHead(no, title, q, right = ''){ return `<div class="win-h"><span class="no">${no}</span><h3>${title}</h3>${q ? `<span class="q">${q}</span>` : ''}<span class="sp"></span>${right}</div>`; }
-function helpers(st, t, g, target){
+function helpers(st, t, target, g){
   const out = [];
   for (const p of d.personen){ if (g && p.fm !== g) continue; const c = p.w[t];
     if (!c){ if (inContract(p, t) && !startsIn(p, t) && !endsIn(p, t) && !(p.ign || {}).gap) out.push({p, from:'', why:'angestellt, aber nicht eingeplant', pr:1, df:0}); continue; }
     if (ABS.has(c) || c.includes('/') || c === target) continue;
-    if (c === 'EIC'){ const gv = grpOf(p, t); if (!gv || gv.includes('/') || !GROUP[gv]) continue; const df = st.grp[gv][t] - (+d.bedarfEIC[gv][t] || 0);
-      if (df > 0.5) out.push({p, from:'EIC', why:`Eichhof · ${GROUP[gv].n} hat ${fmt(df)} zu viel`, pr:0, df}); continue; }
+    if (c === 'EIC'){ const gv = grpOf(p, t); if (!gv || gv.includes('/') || !GROUP[gv]) continue; const df = dz(st.grp[gv][t], grpBed(gv, t));
+      if (df !== null && df > 0.5) out.push({p, from:'EIC', why:`Eichhof · ${GROUP[gv].n} hat ${fmt(df)} zu viel`, pr:0, df}); continue; }
     if (!st.ist[c]) continue;
-    const df = g ? st.ist[c][g][t] - st.soll[c][g][t] : st.ist[c].T[t] - st.soll[c].T[t];
-    if (df > 0.5) out.push({p, from:c, why:`${AREA[c].k} hat ${fmt(df)} ${g === 'F' ? 'Frauen' : g === 'M' ? 'Männer' : ''} zu viel`, pr:0, df}); }
+    const df = dz(st.ist[c].T[t], st.soll[c].T[t]);
+    if (df !== null && df > 0.5) out.push({p, from:c, why:`${AREA[c].k} hat ${fmt(df)} zu viel`, pr:0, df}); }
   return out.sort((x, y) => x.pr - y.pr || (y.p.hb === target) - (x.p.hb === target) || y.df - x.df || name(x.p).localeCompare(name(y.p), 'de'));
 }
 function win1(st){
   const t0 = tNow(), ws = [0, 1, 2, 3].map(i => t0 + i).filter(t => t < d.T);
-  const diff = (a, g, t) => st.ist[a][g][t] - st.soll[a][g][t];
+  const diff = (a, t) => dz(st.ist[a].T[t], st.soll[a].T[t]);
   let f = ui.focus && ws.includes(ui.focus.t) && AREA[ui.focus.a] ? ui.focus : null;
-  if (!f) for (const t of ws){ let best = null; for (const a of AREAS) for (const g of ['F','M']){ const x = diff(a.c, g, t); if (x < -0.5 && (!best || x < best.x)) best = {a:a.c, g, t, x}; } if (best){ f = best; break; } }
+  if (!f) for (const t of ws){ let best = null; for (const a of AREAS){ const x = diff(a.c, t); if (x !== null && x < -0.5 && (!best || x < best.x)) best = {a:a.c, t, x}; } if (best){ f = best; break; } }
   const openReq = (a, t) => d.anfragen.filter(r => r.st === 'offen' && r.area === a && t >= r.t && t <= (r.t2 ?? r.t));
-  const cell = (a, g, t) => { const i = st.ist[a][g][t], s = st.soll[a][g][t];
-    if (Math.abs(i) < 0.05 && Math.abs(s) < 0.05) return `<td class="na${g === 'F' ? ' wk' : ''}">·</td>`;
-    const x = i - s, on = f && f.a === a && f.g === g && f.t === t;
-    return `<td${g === 'F' ? ' class="wk"' : ''}><button class="dc ${cls(x)}" data-focus="${a}|${g}|${t}" aria-pressed="${on}" title="${AREA[a].n}, ${kwLbl(t)}, ${g === 'F' ? 'Frauen' : 'Männer'}: Bedarf ${fmt(s)}, eingeplant ${fmt(i)}">${Math.abs(x) < 0.05 ? '✓' : fmtD(x)}</button></td>`; };
+  const cell = (a, t) => { const I = st.ist[a], S = st.soll[a], x = diff(a, t);
+    if (Math.abs(I.T[t]) < 0.05 && (S.T[t] === null || Math.abs(S.T[t]) < 0.05)) return `<td class="na wk">·</td>`;
+    const on = f && f.a === a && f.t === t;
+    return `<td class="wk"><button class="dc ${cls(x)}" data-focus="${a}|${t}" aria-pressed="${on}" title="${AREA[a].n}, ${kwLbl(t)}: Bedarf ${fmtN(S.T[t])}, eingeplant ${fmt(I.T[t])} (Frauen ${fmt(I.F[t])}, Männer ${fmt(I.M[t])})">${x === null ? '–' : Math.abs(x) < 0.05 ? '✓' : fmtD(x)}</button></td>`; };
   const rows = AREAS.map(a => { const rq = ws.reduce((n, t) => n + openReq(a.c, t).length, 0);
-    return `<tr><th><span class="hbchip k-${a.c}">${a.k}</span>${rq ? `<span class="rq" title="offene Anfrage">Anfrage</span>` : ''}</th>${ws.map(t => cell(a.c, 'F', t) + cell(a.c, 'M', t)).join('')}</tr>`; }).join('');
-  const tot = `<tr class="tot"><th>Gesamt</th>${ws.map(t => ['F','M'].map(g => { const x = st.tot.ist[g][t] - st.tot.soll[g][t]; return `<td${g === 'F' ? ' class="wk"' : ''}><span class="dc ${cls(x)}" style="display:inline-block">${Math.abs(x) < 0.05 ? '✓' : fmtD(x)}</span></td>`; }).join('')).join('')}</tr>`;
-  const mx = `<div class="mxw"><table class="mx"><thead><tr><th></th>${ws.map(t => `<th colspan="2" class="wk${t === t0 ? ' now' : ''}">KW ${kwT(t)}</th>`).join('')}</tr>
-    <tr><th></th>${ws.map(() => '<th class="wk">Frauen</th><th>Männer</th>').join('')}</tr></thead><tbody>${rows}${tot}</tbody></table></div>`;
+    return `<tr><th><span class="hbchip k-${a.c}">${a.k}</span>${rq ? `<span class="rq" title="offene Anfrage">Anfrage</span>` : ''}</th>${ws.map(t => cell(a.c, t)).join('')}</tr>`; }).join('');
+  const tot = `<tr class="tot"><th>Gesamt</th>${ws.map(t => { const x = dz(st.tot.ist.T[t], st.tot.soll.T[t]); return `<td class="wk"><span class="dc ${cls(x)}" style="display:inline-block" title="${x === null ? 'Bedarf nicht für alle Bereiche erfasst: ' + esc(missTxt(st, t)) : ''}">${x === null ? '–' : Math.abs(x) < 0.05 ? '✓' : fmtD(x)}</span></td>`; }).join('')}</tr>`;
+  const mx = `<div class="mxw"><table class="mx"><thead><tr><th></th>${ws.map(t => `<th class="wk${t === t0 ? ' now' : ''}">KW ${kwT(t)}</th>`).join('')}</tr></thead><tbody>${rows}${tot}</tbody></table></div>`;
   let focus = '';
-  if (f){ const i = st.ist[f.a][f.g][f.t], s = st.soll[f.a][f.g][f.t], x = i - s, gl = f.g === 'F' ? 'Frauen' : 'Männer';
-    const reqs = openReq(f.a, f.t), cands = x < -0.5 ? helpers(st, f.t, f.g, f.a) : [];
-    focus = `<div class="focus"><div><b>${AREA[f.a].n} · ${kwLbl(f.t)} · ${gl}</b>: Bedarf ${fmt(s)}, eingeplant ${fmt(i)} ${stTxt(x)}</div>
+  if (f){ const I = st.ist[f.a], S = st.soll[f.a], x = diff(f.a, f.t);
+    const gF = dz(I.F[f.t], S.F[f.t]), gM = dz(I.M[f.t], S.M[f.t]);
+    const g = gF !== null && gM !== null ? (gF < -0.5 && gM >= -0.5 ? 'F' : gM < -0.5 && gF >= -0.5 ? 'M' : null) : null;
+    const reqs = openReq(f.a, f.t), cands = x !== null && x < -0.5 ? helpers(st, f.t, f.a, g) : [];
+    focus = `<div class="focus"><div><b>${AREA[f.a].n} · ${kwLbl(f.t)}</b>: Bedarf ${fmtN(S.T[f.t])}${!isN(S.F[f.t]) && !isN(S.M[f.t]) ? ` (Frauen ${fmt(S.F[f.t])}, Männer ${fmt(S.M[f.t])})` : ''}, eingeplant ${fmt(I.T[f.t])} (Frauen ${fmt(I.F[f.t])}, Männer ${fmt(I.M[f.t])}) ${stTxt(x)}</div>
+      ${gF === null && x !== null && x < -0.5 ? '<div class="xs">Ob Frauen oder Männer fehlen, ist nicht bekannt: Der Bedarf dieses Bereichs ist nur als Gesamtzahl erfasst.</div>' : ''}
       ${reqs.map(r => `<div class="xs">Anfrage: ${r.n} ${r.fm === 'F' ? 'Frauen' : r.fm === 'M' ? 'Männer' : 'Personen'} ${rangeLbl(r.t, r.t2 ?? r.t)}${r.text ? ' – ' + esc(r.text) : ''} <span class="muted">(${esc(r.von)})</span> <button class="btn sm" data-act="req-done" data-id="${r.id}">erledigt</button></div>`).join('')}
-      ${x < -0.5 ? `<div class="lbl2" style="margin:0">Wer könnte aushelfen? <span class="muted">${cands.length ? `(${cands.length})` : ''}</span></div>
+      ${x !== null && x < -0.5 ? `<div class="lbl2" style="margin:0">Wer könnte aushelfen?${g ? ` <span class="muted">(nur ${g === 'F' ? 'Frauen' : 'Männer'}, weil diese fehlen)</span>` : ''} <span class="muted">${cands.length ? `(${cands.length})` : ''}</span></div>
         ${cands.length ? `<div class="tw"><table class="plain"><tbody>${cands.slice(0, 12).map(c => { const pa = partnerOf(c.p);
-          return `<tr><td>${pLink(c.p)}${pa ? ` <span class="xs" title="Partner">∞ ${esc(name(pa))}</span>` : ''}</td><td class="xs">${esc(c.why)}</td><td style="text-align:right"><button class="btn sm" data-act="assign" data-p="${c.p.id}" data-from="${c.from}" data-to="${f.a}" data-t="${f.t}">Zuteilen …</button></td></tr>`; }).join('')}</tbody></table></div>`
-          : `<div class="xs">Niemand frei: kein Bereich hat in dieser Woche ${gl} zu viel. → Fenster 3 «Anstellen».</div>`}` : '<div class="xs">Hier fehlt niemand.</div>'}</div>`; }
-  else focus = `<div class="focus"><b>In den nächsten 4 Wochen fehlt niemand.</b></div>`;
+          return `<tr><td>${pLink(c.p)} <span class="xs">${c.p.fm || '?'}</span>${pa ? ` <span class="xs" title="Partner">∞ ${esc(name(pa))}</span>` : ''}</td><td class="xs">${esc(c.why)}</td><td style="text-align:right"><button class="btn sm" data-act="assign" data-p="${c.p.id}" data-from="${c.from}" data-to="${f.a}" data-t="${f.t}">Zuteilen …</button></td></tr>`; }).join('')}</tbody></table></div>`
+          : '<div class="xs">Niemand frei: kein Bereich hat in dieser Woche zu viele Leute. → Fenster 3 «Anstellen».</div>'}` : x === null ? '<div class="xs">Für diese Woche ist kein Bedarf erfasst.</div>' : '<div class="xs">Hier fehlt niemand.</div>'}</div>`; }
+  else focus = `<div class="focus"><b>In den nächsten 4 Wochen fehlt nirgends jemand</b> <span class="xs">(soweit der Bedarf erfasst ist).</span></div>`;
   const lent = d.personen.filter(p => p.hb && p.w[t0] && !ABS.has(p.w[t0]) && !p.w[t0].split('/').includes(p.hb));
   const lentL = `<details><summary>Ausgeliehen in KW ${ui.kw} (${lent.length})</summary>${lent.length ? `<div class="tw"><table class="plain"><tbody>${lent.map(p => `<tr><td>${pLink(p)}</td><td class="xs">${AREA[p.hb].k} → ${esc(areaTxt(p.w[t0]))}</td></tr>`).join('')}</tbody></table></div>` : '<span class="xs">Niemand.</span>'}</details>`;
   return `<section class="win">${winHead(1, 'Wo fehlen Leute?', `Differenz eingeplant − Bedarf, KW ${kwT(ws[0])}–${kwT(ws[ws.length - 1])}`)}
-    <div class="xs">Rot = es fehlen Leute, gelb = zu viele. Feld anklicken: wer könnte aushelfen?</div>${mx}${focus}${lentL}</section>`;
+    <div class="xs">Rot = es fehlen Leute, gelb = zu viele, – = Bedarf nicht erfasst. Feld anklicken: wer könnte aushelfen?</div>${mx}${focus}${lentL}</section>`;
 }
 function win2(){
   const t = tNow(), n = ui.mutRange === 'woche' ? 1 : 4, ts = Array.from({length:n}, (_, i) => t + i).filter(x => x < d.T);
@@ -1063,24 +1114,28 @@ function win2(){
 }
 function win3(st){
   const t = tNow(), n = Math.max(2, Math.min(40, +ui.hireN || 12)), ts = Array.from({length:n}, (_, i) => t + 1 + i).filter(x => x < d.T);
-  const res = {F:{n:0, max:0, areas:{}}, M:{n:0, max:0, areas:{}}};
-  for (const x of ts) for (const g of ['F','M']){ const df = st.tot.ist[g][x] - st.tot.soll[g][x]; if (df < -0.5){ res[g].n++; res[g].max = Math.max(res[g].max, -df); }
-    for (const ar of AREAS){ const da = st.ist[ar.c][g][x] - st.soll[ar.c][g][x]; if (da < -0.5) res[g].areas[ar.c] = Math.max(res[g].areas[ar.c] || 0, -da); } }
-  const top = g => Object.entries(res[g].areas).sort((x, y) => y[1] - x[1]);
-  const topName = g => top(g).length ? AREA[top(g)[0][0]].k : 'mehrere Bereiche';
-  const line = (g, lab) => res[g].n ? `in <b>${res[g].n} von ${ts.length}</b> Wochen fehlen ${lab} (bis ${fmt(res[g].max)})${top(g).length ? ' – vor allem ' + top(g).slice(0, 3).map(([c, v]) => `${AREA[c].k} (${fmt(v)})`).join(', ') : ''}` : `genug ${lab} eingeplant`;
+  const per = AREAS.map(a => { const S = st.soll[a.c], I = st.ist[a.c]; let wk = 0, max = 0, unk = 0, fmF = 0, fmM = 0, fmKnownW = 0;
+    for (const x of ts){ const df = dz(I.T[x], S.T[x]); if (df === null){ unk++; continue; } if (df < -0.5){ wk++; max = Math.max(max, -df);
+      const f = dz(I.F[x], S.F[x]), m = dz(I.M[x], S.M[x]); if (f !== null && m !== null){ fmKnownW++; if (f < -0.5) fmF = Math.max(fmF, -f); if (m < -0.5) fmM = Math.max(fmM, -m); } } }
+    return {a, wk, max, unk, fmF, fmM, fmKnownW}; });
+  const short = per.filter(x => x.wk), unk = per.filter(x => x.unk === ts.length);
+  const fmShort = short.filter(x => x.fmKnownW), F = fmShort.some(x => x.fmF > 0.5), M = fmShort.some(x => x.fmM > 0.5);
+  const lines = short.length ? short.sort((x, y) => y.max - x.max).map(x => { const I = st.ist[x.a.c];
+    return `<li><b>${x.a.n}</b>: in ${x.wk} von ${ts.length - x.unk} Wochen fehlen Leute (bis ${fmt(x.max)})${x.fmKnownW ? ` – davon Frauen bis ${fmt(x.fmF)}, Männer bis ${fmt(x.fmM)}` : ` <span class="xs">· zurzeit eingeplant (KW ${ui.kw}): ${fmt(I.F[t])} Frauen, ${fmt(I.M[t])} Männer</span>`}</li>`; }).join('')
+    : '<li>Soweit der Bedarf erfasst ist, fehlt in diesem Zeitraum niemand.</li>';
   let rec;
-  if (res.F.n && res.M.n) rec = `Frauen und Männer fehlen – ein Paar passt: Frau → ${topName('F')}, Mann → ${topName('M')}.`;
-  else if (res.M.n) rec = 'Es fehlen Männer – eher Männer anstellen. Bei einem Paar hätte die Frau zu wenig Arbeit.';
-  else if (res.F.n) rec = 'Es fehlen Frauen – eher Frauen anstellen. Bei einem Paar hätte der Mann zu wenig Arbeit.';
-  else rec = 'In diesem Zeitraum fehlt niemand – keine Anstellung nötig.';
+  if (!short.length) rec = 'Keine Anstellung nötig (soweit der Bedarf erfasst ist).';
+  else if (fmShort.length === short.length) rec = F && M ? 'Frauen und Männer fehlen – ein Paar passt.' : F ? 'Es fehlen Frauen – eher Frauen anstellen.' : M ? 'Es fehlen Männer – eher Männer anstellen.' : 'Es fehlen Leute.';
+  else rec = `Es fehlen Leute. Ob Frauen, Männer oder ein Paar, lässt sich nicht berechnen: Der Bedarf ${short.filter(x => !x.fmKnownW).length === 1 ? 'dieses Bereichs' : 'dieser Bereiche'} ist nur als Gesamtzahl erfasst. <button class="lnk" data-goto-bedarf="${short.find(x => !x.fmKnownW).a.c}">Bedarf nach Frauen und Männern erfassen</button>`;
   const bew = d.bew.filter(b => b.st !== 'angelegt' && b.st !== 'abgesagt'), done = d.bew.length - bew.length;
   const bewRows = d.bew.length ? d.bew.map(b => `<tr${b.st === 'angelegt' || b.st === 'abgesagt' ? ' class="muted"' : ''}><td>${esc(b.vn)} ${esc(b.nn)}</td><td>${esc(b.fm)}</td><td class="xs">${esc(b.partner)}</td><td class="xs">${b.wunsch ? AREA[b.wunsch].k : ''}${b.ab ? ' ab KW ' + b.ab : ''}</td><td class="xs">${esc(b.bem)}</td>
     <td><select class="inp" data-bew-st="${b.id}" aria-label="Status">${BEW_ST.map(s => opt(s, s, b.st)).join('')}</select></td>
     <td style="white-space:nowrap">${b.st !== 'angelegt' ? `<button class="btn sm" data-act="bew-anlegen" data-id="${b.id}">Anstellen</button>` : ''}<button class="del" data-act="bew-del" data-id="${b.id}" aria-label="Löschen">×</button></td></tr>`).join('')
     : '<tr><td class="muted">Noch keine Bewerbungen.</td></tr>';
   return `<section class="win">${winHead(3, 'Anstellen', '', `<label class="xs" for="h-n">Blick auf die nächsten <input id="h-n" class="inp" type="number" min="2" max="40" value="${n}" style="width:52px"> Wochen</label>`)}
-    <div><div>Frauen: ${line('F', 'Frauen')}</div><div>Männer: ${line('M', 'Männer')}</div><p class="big" style="margin:8px 0 0">${rec}</p></div>
+    <ul style="margin:0;padding-left:18px;line-height:1.55">${lines}</ul>
+    ${unk.length ? `<div class="xs">Kein Bedarf erfasst für ${ts.length} Wochen: ${unk.map(x => x.a.k).join(', ')}.</div>` : ''}
+    <p class="big" style="margin:0">${rec}</p>
     <div><b class="xs">Bewerberliste (${bew.length} offen${done ? `, ${done} erledigt` : ''})</b><div class="tw"><table class="plain"><tbody>${bewRows}</tbody></table></div></div>
     <details class="noprint"><summary>+ Bewerbung erfassen</summary><div class="toolbar">
       <label for="bw-vn">Vorname <input id="bw-vn" class="inp" style="width:110px"></label><label for="bw-nn">Nachname <input id="bw-nn" class="inp" style="width:120px"></label>
@@ -1133,12 +1188,11 @@ function vKraeuter(st){
   const rel = d.personen.filter(related);
   const ein = rel.filter(p => startsIn(p, t)), aus = rel.filter(p => endsIn(p, t));
   const cnt = c => rel.filter(p => p.w[t] === c).length;
-  const sumF = st.soll.EIC.F[t], sumM = st.soll.EIC.M[t];
   const head = `<div class="toolbar"><h2>Kräuter Eichhof · KW ${ui.kw}</h2><span class="muted">${weekDates(t)}</span>
     ${seg('krview', ui.krView, [['woche', 'Woche planen'], ['jahr', 'Jahresübersicht'], ['aufgaben', 'Aufgaben']])}
     ${ui.krView === 'woche' ? `<span class="xs">Zeigen</span>${seg('krshow', ui.krShow, [['alle', 'alle'], ['da', 'nur wer da ist']])}` : ''}
     <span class="sp"></span><button class="btn" data-act="req-pop" data-area="EIC">Leute anfragen</button></div>
-    ${ui.krView !== 'aufgaben' ? `<div class="toolbar xs">Frauen ${fmt(st.ist.EIC.F[t])} von ${fmt(sumF)} ${stTxt(st.ist.EIC.F[t] - sumF)} · Männer ${fmt(st.ist.EIC.M[t])} von ${fmt(sumM)} ${stTxt(st.ist.EIC.M[t] - sumM)}
+    ${ui.krView !== 'aufgaben' ? `<div class="toolbar xs">Bedarf ${fmtN(st.soll.EIC.T[t])} · eingeplant ${fmt(st.ist.EIC.T[t])} (Frauen ${fmt(st.ist.EIC.F[t])}, Männer ${fmt(st.ist.EIC.M[t])}) ${stTxt(dz(st.ist.EIC.T[t], st.soll.EIC.T[t]))}
       · <span title="${esc(ein.map(name).join(', '))}">Eintritte ${ein.length}</span> · <span title="${esc(aus.map(name).join(', '))}">Austritte ${aus.length}</span> · Ferien ${cnt('F')} · Krank ${cnt('K')} · Unfall ${cnt('U')}</div>` : ''}`;
   if (ui.krView === 'aufgaben') return `<div class="sheet gut"><div class="stack">${head}${aufgabenView()}</div></div>`;
   if (ui.krView === 'jahr') return `<div class="sheet fill gut">${head}${yearGrid(st)}</div>`;
@@ -1154,10 +1208,10 @@ function board(st, t){
     <div class="row">${L[''].act.length} da · in eine Gruppe ziehen</div></div>
     <div class="cards">${sortL(L[''].act).map(x => cardHTML(x.p, t, '', x.s)).join('')}${greyHTML('', L[''].grey)}</div></div>`;
   for (const g of GROUPS){
-    const b = +d.bedarfEIC[g.c][t] || 0, i = st.grp[g.c][t];
-    out += `<div class="lane" data-drop="${g.c}"><div class="lane-h k-${g.c}"><div class="t">${g.n} <small>${g.fm === 'F' ? 'Frauen' : 'Männer'}</small></div>
-      <div class="row"><span>Bedarf</span><span class="step"><button data-act="bed-" data-g="${g.c}" aria-label="Bedarf ${g.n} weniger">−</button><b>${fmt(b)}</b><button data-act="bed+" data-g="${g.c}" aria-label="Bedarf ${g.n} mehr">+</button></span>
-      <span>eingeplant <b style="color:var(--fg)">${fmt(i)}</b></span></div><div class="row">${stTxt(i - b)}</div></div>
+    const b = grpBed(g.c, t), i = st.grp[g.c][t];
+    out += `<div class="lane" data-drop="${g.c}"><div class="lane-h k-${g.c}"><div class="t">${g.n}</div>
+      <div class="row"><span>Bedarf</span><span class="step"><button data-act="bed-" data-g="${g.c}" aria-label="Bedarf ${g.n} weniger">−</button><b>${fmtN(b)}</b><button data-act="bed+" data-g="${g.c}" aria-label="Bedarf ${g.n} mehr">+</button></span>
+      <span>eingeplant <b style="color:var(--fg)">${fmt(i)}</b></span></div><div class="row">${stTxt(dz(i, b))}</div></div>
       <div class="cards">${sortL(L[g.c].act).map(x => cardHTML(x.p, t, g.c, x.s)).join('') || '<div class="empty">Niemand eingeteilt</div>'}${greyHTML(g.c, L[g.c].grey)}</div></div>`;
   }
   out += `<div class="lane drop-only" data-drop="ABW"><div class="lane-h k-F"><div class="t">Abwesend melden</div></div><div class="cards">Karte hierher ziehen.<br>Danach Ferien, Krank oder Unfall und die Wochen wählen.</div></div>`;
@@ -1187,10 +1241,10 @@ function yearGrid(st){
   });
   const prev = d.jahre.find(j => j.y === ui.year - 1);
   body += `<tr class="sec"><td class="st0"></td><td class="st1">Bedarf und eingeplant</td><td colspan="${Y().n}"></td></tr>`;
-  for (const g of GROUPS){ const bed = d.bedarfEIC[g.c];
-    body += `<tr><td class="st0"></td><td class="st1" style="background:var(--${g.c})"><b>${g.n}</b> · Bedarf</td>${WK().map(x => `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="bed|${g.c}|${x}">${fmt(bed[x] || 0)}</td>`).join('')}</tr>`;
+  for (const g of GROUPS){
+    body += `<tr><td class="st0"></td><td class="st1" style="background:var(--${g.c})"><b>${g.n}</b> · Bedarf</td>${WK().map(x => { const b = grpBed(g.c, x); return `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="grp|${g.c}|${x}">${isN(b) ? '' : fmt(b)}</td>`; }).join('')}</tr>`;
     body += `<tr><td class="st0"></td><td class="st1 sub">${g.n} · eingeplant</td>${WK().map(x => `<td class="num${x === now ? ' kwc' : ''}">${fmt(st.grp[g.c][x])}</td>`).join('')}</tr>`;
-    body += `<tr><td class="st0"></td><td class="st1 sub">${g.n} · Differenz</td>${WK().map(x => { const df = st.grp[g.c][x] - (+bed[x] || 0); return `<td class="num ${cls(df)}${x === now ? ' kwc' : ''}">${Math.abs(df) < 0.05 ? '·' : fmtD(df)}</td>`; }).join('')}</tr>`; }
+    body += `<tr><td class="st0"></td><td class="st1 sub">${g.n} · Differenz</td>${WK().map(x => { const df = dz(st.grp[g.c][x], grpBed(g.c, x)); return `<td class="num ${cls(df)}${x === now ? ' kwc' : ''}">${isN(df) ? '–' : Math.abs(df) < 0.05 ? '·' : fmtD(df)}</td>`; }).join('')}</tr>`; }
   return `<div class="toolbar"><div class="legend">${GROUPS.map(g => `<span class="k k-${g.c}">${g.c} ${g.n}</span>`).join('')}<span class="k k-NOG">? ohne Gruppe</span>
     ${STATUS.map(s => `<span class="k k-${s.c}">${s.c} ${s.n}</span>`).join('')}<span class="k">BLU = anderswo</span></div><span class="xs">Wochen markieren und Gruppe wählen, z.B. ab KW 4 in eine andere Gruppe.</span>
     <span class="sp"></span>${prev ? `<button class="btn" data-act="bedeic-vj">Bedarf ${prev.y} übernehmen</button>` : ''}</div>
@@ -1224,18 +1278,18 @@ function vGemuese(st){
   let body = '';
   d.stunden.forEach((r, ri) => {
     if (r.abstand){ body += `<tr><td class="lbl" style="height:8px"></td><td colspan="${Y().n + 1}" style="height:8px"></td></tr>`; return; }
-    const tot = WK().reduce((a, x) => a + (+r.v[x] || 0), 0);
+    const tot = WK().reduce((a, x) => a + (isN(r.v[x]) ? 0 : +r.v[x]), 0);
     body += `<tr><td class="lbl${r.gr ? ' g' : ''}"><span data-tedit="stdt|${ri}" style="display:inline-block;min-width:60%">${esc(r.t)}</span>${r.n ? ` <span class="muted">${esc(r.n)}</span>` : ''} <button class="del" data-act="std-del" data-i="${ri}" aria-label="Zeile löschen">×</button></td>`
       + WK().map(x => `<td class="num ed${x === now ? ' kwc' : ''}" data-edit="std|${ri}|${x}">${r.v[x] ? fmt(r.v[x]) : ''}</td>`).join('')
       + `<td class="num" style="font-weight:700">${fmt(tot)}</td></tr>`;
   });
-  const jaet = WK().map(x => d.stunden.reduce((a, r) => a + (r.v && /jäten/i.test(r.t) ? (+r.v[x] || 0) : 0), 0));
-  const sumH = WK().map(x => hoursSum(x));
+  const jaet = WK().map(x => d.stunden.some(r => r.jaet && r.v && !isN(r.v[x])) ? d.stunden.reduce((a, r) => a + (r.jaet && r.v && !isN(r.v[x]) ? +r.v[x] : 0), 0) : null);
+  const sumH = WK().map(x => hoursAt(x));
   const row = (lab, arr, o = {}) => `<tr class="sum"><td class="lbl"${o.bg ? ` style="background:var(--${o.bg})"` : ''}>${lab}</td>${arr.map((v, i) => { const x = WK()[i];
-    return `<td class="num ${o.diff ? cls(v) : ''}${x === now ? ' kwc' : ''}">${o.diff ? (Math.abs(v) < 0.05 ? '·' : fmtD(v)) : fmt(v)}</td>`; }).join('')}<td class="num">${o.total === false ? '' : fmt(arr.reduce((a, b) => a + b, 0))}</td></tr>`;
+    return `<td class="num ${o.diff ? cls(v) : ''}${x === now ? ' kwc' : ''}">${o.diff ? (isN(v) ? '–' : Math.abs(v) < 0.05 ? '·' : fmtD(v)) : fmtN(v)}</td>`; }).join('')}<td class="num">${o.total === false ? '' : fmt(arr.reduce((a, b) => a + (isN(b) ? 0 : b), 0))}</td></tr>`;
   body += `<tr class="sec"><td class="lbl">Ergebnis</td><td colspan="${Y().n + 1}"></td></tr>`;
   body += row('Summe Stunden', sumH) + row(`Bedarf: Personen (Stunden ÷ ${d.std})`, soll, {bg:'FRE', total:false}) + row('Eingeplant', ist, {total:false})
-    + row('Differenz (eingeplant − Bedarf)', ist.map((v, i) => v - soll[i]), {diff:1, total:false}) + row('davon Jätstunden (automatisierbar)', jaet);
+    + row('Differenz (eingeplant − Bedarf)', ist.map((v, i) => dz(v, soll[i])), {diff:1, total:false}) + row('Jätstunden (automatisierbar)', jaet);
   const team = teamData('FRE', t);
   const trow = (x, grey) => `<div class="trow${grey ? ' grey' : ''}"><span class="fm">${x.p.fm || '?'}</span><span class="nm">${pLink(x.p)}</span>${grey ? `<span class="tag">${esc(grey.why)}</span>` : x.s < 1 ? `<span class="tag">${fmt(x.s)}</span>` : ''}
     ${!grey ? `<button data-act="abs-pop" data-p="${x.p.id}">Abwesend …</button>` : grey.kind === 'abs' ? `<button data-act="back-pop" data-p="${x.p.id}" data-kind="abs">Wieder da …</button>`
@@ -1244,7 +1298,7 @@ function vGemuese(st){
   return `<div class="sheet gut"><div class="stack">
     <div class="toolbar"><h2>Arbeitsplanung Freiland ${ui.year}</h2>
       <label for="std">Stunden pro Person und Woche <input class="inp" id="std" type="number" min="20" max="70" value="${d.std}" style="width:60px"></label>
-      <span class="muted">KW ${ui.kw}: Bedarf ${fmt(st.soll.FRE.T[t])} · eingeplant ${fmt(st.ist.FRE.T[t])}</span> ${stTxt(st.ist.FRE.T[t] - st.soll.FRE.T[t])}<span class="sp"></span>
+      <span class="muted">KW ${ui.kw}: Bedarf ${fmtN(st.soll.FRE.T[t])} · eingeplant ${fmt(st.ist.FRE.T[t])}</span> ${stTxt(dz(st.ist.FRE.T[t], st.soll.FRE.T[t]))}<span class="sp"></span>
       <button class="btn" data-act="std-add">+ Tätigkeit</button>${prev ? `<button class="btn" data-act="std-vj">Stunden ${prev.y} übernehmen</button>` : ''}<button class="btn" data-act="req-pop" data-area="FRE">Leute anfragen</button></div>
     <div class="gridwrap" style="max-height:62vh;min-height:300px"><table class="xl">${weekHead('<th class="st0" style="min-width:230px;max-width:none;left:0;text-align:left">Tätigkeit (Stunden pro Woche)</th>', '<th class="st0" style="left:0"></th>', {right:'<th rowspan="2">Summe</th>'})}<tbody>${body}</tbody></table></div>
     <div class="cols">
@@ -1252,7 +1306,7 @@ function vGemuese(st){
         <div class="team">${team.act.map(x => trow(x)).join('') || '<span class="muted">Niemand eingeplant.</span>'}${team.grey.map(x => trow(x, x)).join('')}</div>
         <label class="xs" for="wn-g" style="display:block;margin-top:10px">Notiz zur Woche KW ${ui.kw} (erscheint in der Personalsitzung)</label>
         <textarea id="wn-g" class="inp" data-wnote="FRE" rows="2" style="width:100%;box-sizing:border-box">${esc((d.wnotes[t] || {}).FRE || '')}</textarea></div>
-      <div class="panel"><h3>Freiland: eingeplant und Bedarf</h3>${chart('cg', 'Freiland eingeplant und Bedarf', ist, soll, ['eingeplant', 'Bedarf (aus Stunden)'])}</div></div>
+      <div class="panel"><h3>Freiland: eingeplant und Bedarf</h3>${chart('cg', 'Freiland eingeplant und Bedarf', yr(st.ist.FRE.F), yr(st.ist.FRE.M), ist, soll)}</div></div>
   </div></div>`;
 }
 
@@ -1309,7 +1363,7 @@ function applyMove(o, mode, bisKw){
     commit(`${nm}: ab ${kwLbl(t)} fest in ${toN}`, dd => { const p = P(dd, o.pid), old = p.g || '', g = (dd.gw[o.pid] ||= {});
       if (old) for (let k = 0; k < t; k++) if (share(p.w[k], 'EIC') && g[k] === undefined) g[k] = old;
       for (const k of Object.keys(g)) if (+k >= t) delete g[k];
-      p.g = o.to; });
+      p.g = o.to; p.gq = 'von Hand'; });
     toast(`${nm} ist ab KW ${ui.kw} fest in ${toN}.`); return; }
   const eic = weeks.filter(k => share(p0.w[k], 'EIC'));
   if (!eic.length){ toast('In diesen Wochen ist die Person nicht bei Eichhof.'); return; }
@@ -1500,7 +1554,7 @@ function openPerson(pid, preset = {}){
       <label for="p-hb">Hauptbereich<select class="inp" id="p-hb">${opt('', '– wählen –', p.hb)}${AREAS.map(a => opt(a.c, a.n, p.hb)).join('')}</select></label>
       <div class="full"><div class="lbl2">Verträge – Eintritt und Austritt. Bei mehreren Verträgen (z.B. Frühling und Herbst, neuer AV) je eine Zeile.</div>
         <div id="vt-list">${vts.map(vtRow).join('')}</div><button type="button" class="btn sm" data-act="vt-add">+ weiterer Vertrag</button></div>
-      <label for="p-g">Gruppe Eichhof<select class="inp" id="p-g"><option value="">–</option>${GROUPS.map(g => opt(g.c, g.n, p.g)).join('')}</select></label>
+      <label for="p-g">Gruppe Eichhof<select class="inp" id="p-g"><option value="">–</option>${GROUPS.map(g => opt(g.c, g.n, p.g)).join('')}</select>${p.gq ? `<span class="xs" style="color:var(--fg-3)">Quelle: ${esc(p.gq)}</span>` : ''}</label>
       <label for="p-zu">Zustand<select class="inp" id="p-zu">${opt('ok', 'ok', p.zu)}${opt('FA', 'FA (fest angestellt)', p.zu)}${opt('', '–', p.zu)}</select></label>
       <label for="p-badge">Badge<input class="inp" id="p-badge" value="${esc(p.badge)}"></label>
       <label for="p-fs">Führerschein<input class="inp" id="p-fs" value="${esc(p.fs)}"></label>
@@ -1537,7 +1591,7 @@ function savePerson(){
   const newId = pid || d.nextId;
   commit(pid ? `${label}: Angaben geändert` : `Neue Person: ${label} (${AREA[f.hb].k}${vt[0] && vt[0].von ? ', ab ' + fmtDate(vt[0].von) : ''})`, dd => {
     let p;
-    if (pid){ p = P(dd, pid); if (!p) return; Object.assign(p, f); }
+    if (pid){ p = P(dd, pid); if (!p) return; if (p.g !== f.g) p.gq = 'von Hand'; Object.assign(p, f); }
     else { p = {id:dd.nextId++, pa:null, ign:{}, w:new Array(dd.T).fill(''), ...f}; dd.personen.push(p); }
     p.vt = vt.map(c => ({...c}));
     const oldPartner = p.pa ? dd.personen.find(o => o.pa === p.pa && o.id !== p.id) : null;
@@ -1578,31 +1632,34 @@ function copyTable(){
 
 /* ---------- Zahlen und Texte direkt ändern ---------- */
 function getVal(path){ const p = path.split('|');
-  switch (p[0]){ case 'std': return d.stunden[+p[1]].v[+p[2]]; case 'stdt': return d.stunden[+p[1]].t; case 'bed': return d.bedarfEIC[p[1]][+p[2]];
-    case 'soll': return d.soll[p[1]][p[2]][+p[3]]; case 'krank': return d.krank[+p[1]];
+  switch (p[0]){ case 'std': return d.stunden[+p[1]].v[+p[2]]; case 'stdt': return d.stunden[+p[1]].t; case 'grp': return d.bedarfEIC[p[1]][+p[2]];
+    case 'bed': return d.bed[p[1]][p[2]][+p[3]]; case 'krank': return d.krank[+p[1]];
     case 'trakt': return d.trakt[+p[1]][p[2]];
     case 'auf': { const r = d.aufgaben[+p[1]], k = p[2]; return k[0] === 't' && k.length === 2 ? r.tage[+k[1]] : r[k]; } } }
 function setVal(dd, path, v){ const p = path.split('|');
-  switch (p[0]){ case 'std': dd.stunden[+p[1]].v[+p[2]] = v; break; case 'stdt': dd.stunden[+p[1]].t = v; break; case 'bed': dd.bedarfEIC[p[1]][+p[2]] = v; break;
-    case 'soll': dd.soll[p[1]][p[2]][+p[3]] = v; break; case 'krank': dd.krank[+p[1]] = v; break;
+  switch (p[0]){ case 'std': dd.stunden[+p[1]].v[+p[2]] = v; break; case 'stdt': dd.stunden[+p[1]].t = v; break; case 'grp': dd.bedarfEIC[p[1]][+p[2]] = v; break;
+    case 'bed': { const B = dd.bed[p[1]], t = +p[3]; B[p[2]][t] = v;
+      if (B.T && p[2] !== 'T' && !isN(B.F[t]) && !isN(B.M[t])) B.T[t] = r1(+B.F[t] + +B.M[t]); break; }
+    case 'krank': dd.krank[+p[1]] = v; break;
     case 'trakt': dd.trakt[+p[1]][p[2]] = v; break;
     case 'auf': { const r = dd.aufgaben[+p[1]], k = p[2]; if (k[0] === 't' && k.length === 2) r.tage[+k[1]] = v; else r[k] = v; break; } } }
 const isText = path => ['stdt', 'trakt', 'auf'].includes(path.split('|')[0]);
 function pathLabel(path){ const p = path.split('|');
-  switch (p[0]){ case 'std': return `Stunden «${d.stunden[+p[1]].t}» ${kwLbl(+p[2])}`; case 'stdt': return 'Tätigkeit umbenannt'; case 'bed': return `Bedarf ${GROUP[p[1]].n} ${kwLbl(+p[2])}`;
-    case 'soll': return `Bedarf ${AREA[p[1]].k} ${p[2] === 'F' ? 'Frauen' : 'Männer'} ${kwLbl(+p[3])}`; case 'krank': return `Reserve Krank ${kwLbl(+p[1])}`;
+  switch (p[0]){ case 'std': return `Stunden «${d.stunden[+p[1]].t}» ${kwLbl(+p[2])}`; case 'stdt': return 'Tätigkeit umbenannt'; case 'grp': return `Bedarf ${GROUP[p[1]].n} ${kwLbl(+p[2])}`;
+    case 'bed': return `Bedarf ${AREA[p[1]].k}${p[2] === 'F' ? ' Frauen' : p[2] === 'M' ? ' Männer' : ''} ${kwLbl(+p[3])}`; case 'krank': return `Reserve Krank ${kwLbl(+p[1])}`;
     case 'trakt': return 'Traktandum geändert'; default: return 'Aufgabe geändert'; } }
 function startEdit(td, path){
   path = path || td.dataset.edit;
   if (td.querySelector('input')) return;
   const text = isText(path), old = getVal(path);
-  td.innerHTML = `<input value="${esc(text ? (old || '') : old ? String(old).replace('.', ',') : '')}"${text ? '' : ' inputmode="decimal"'} aria-label="Wert" style="${text ? 'min-width:120px;text-align:left' : ''}">`;
+  td.innerHTML = `<input value="${esc(text ? (old || '') : isN(old) ? '' : String(old).replace('.', ','))}"${text ? '' : ' inputmode="decimal"'} aria-label="Wert" style="${text ? 'min-width:120px;text-align:left' : ''}">`;
   const inp = td.querySelector('input'); inp.focus(); inp.select();
   let done = false;
   const fin = (ok, next) => { if (done) return; done = true;
     const raw = inp.value.trim(); let v;
-    if (text) v = raw; else { v = raw === '' ? 0 : Number(raw.replace(',', '.')); if (Number.isNaN(v)){ ok = false; toast('Bitte eine Zahl eintragen.'); } }
-    if (ok && v !== (text ? (old || '') : (+old || 0))) commit(`${pathLabel(path)}: ${text ? v : fmt(+old || 0) + ' → ' + fmt(v)}`, dd => setVal(dd, path, v));
+    if (text) v = raw; else { v = raw === '' ? null : Number(raw.replace(',', '.')); if (Number.isNaN(v)){ ok = false; toast('Bitte eine Zahl eintragen oder leer lassen.'); } }
+    const same = text ? v === (old || '') : (isN(v) && isN(old)) || (!isN(v) && !isN(old) && v === +old);
+    if (ok && !same) commit(`${pathLabel(path)}: ${text ? v : fmtN(isN(old) ? null : +old) + ' → ' + fmtN(v)}`, dd => setVal(dd, path, v));
     else render();
     if (next){ const nt = document.querySelector(`[data-edit="${next}"]`); if (nt) startEdit(nt); } };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fin(true); } else if (e.key === 'Escape'){ fin(false); }
@@ -1631,7 +1688,7 @@ function startStammEdit(td){
       commit(`${name(p)}: ${c.n} → ${nv ? fmtDate(nv) : 'leer'}`, dd => { P(dd, pid).vt = nvt.map(x => ({...x})); });
       askWeeks(pid, old, nvt); return; }
     if ((p[k] || '') === v){ render(); return; }
-    commit(`${name(p)}: ${c.n} → ${v || 'leer'}`, dd => { P(dd, pid)[k] = v; }); };
+    commit(`${name(p)}: ${c.n} → ${v || 'leer'}`, dd => { const q = P(dd, pid); q[k] = v; if (k === 'g') q.gq = 'von Hand'; }); };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fin(true); } else if (e.key === 'Escape') fin(false); });
   inp.addEventListener('change', () => { if (c.ty === 'sel' || c.ty === 'partner') fin(true); });
   inp.addEventListener('blur', () => fin(true));
@@ -1654,6 +1711,8 @@ function doFix(spec, btn){
     case 'gap-fill': if (!x) return; commit(`${name(p)}: ${x.ts.length} leere Wochen mit ${AREA[p.hb].k} gefüllt`, dd => { const q = P(dd, id); for (const t of x.ts) if (!q.w[t]) q.w[t] = q.hb; }); break;
     case 'gap-ign': commit(`${name(p)}: Wochen ohne Eintrag sind so richtig`, dd => { const q = P(dd, id); q.ign = {...(q.ign || {}), gap:true}; }); break;
     case 'pa-clear': commit(`${name(p)}: Paar-Markierung entfernt`, dd => { P(dd, id).pa = null; }); break;
+    case 'grp-ok': commit(`${name(p)}: Gruppe ${grpName(p.g)} bestätigt`, dd => { P(dd, id).gq = 'bestätigt'; }); break;
+    case 'grp-del': commit(`${name(p)}: Gruppe ${grpName(p.g)} entfernt`, dd => { const q = P(dd, id); q.g = ''; q.gq = ''; }); break;
     case 'del': if (btn.dataset.armed !== '1'){ btn.dataset.armed = '1'; btn.textContent = 'Wirklich löschen?'; return; }
       commit(`Person gelöscht: ${name(p)}`, dd => { dd.personen = dd.personen.filter(q => q.id !== id); delete dd.gw[id]; }); break;
   }
@@ -1687,7 +1746,8 @@ document.addEventListener('click', e => {
   const ks = t.closest('[data-krshow]'); if (ks){ ui.krShow = ks.dataset.krshow; render(); return; }
   const mr = t.closest('[data-mut]'); if (mr){ ui.mutRange = mr.dataset.mut; render(); return; }
   const ca = t.closest('[data-chart-area]'); if (ca){ ui.chartArea = ca.dataset.chartArea; render(); return; }
-  const fo = t.closest('[data-focus]'); if (fo){ const [a, g, ft] = fo.dataset.focus.split('|'); ui.focus = {a, g, t:+ft}; render(); return; }
+  const fo = t.closest('[data-focus]'); if (fo){ const [a, ft] = fo.dataset.focus.split('|'); ui.focus = {a, t:+ft}; render(); return; }
+  const gb = t.closest('[data-goto-bedarf]'); if (gb){ ui.tab = 'uebersicht'; ui.uView = 'bedarf'; ui.bedArea = gb.dataset.gotoBedarf; location.hash = ui.tab; render(); return; }
   const fx = t.closest('[data-fix]'); if (fx){ doFix(fx.dataset.fix, fx); return; }
   const srt = t.closest('th[data-sort]'); if (srt){ const k = srt.dataset.sort; if (ui.sortK === k){ if (ui.sortD > 0) ui.sortD = -1; else { ui.sortK = ''; ui.sortD = 1; } } else { ui.sortK = k; ui.sortD = 1; } render(); return; }
   const pt = t.closest('[data-pick-t]'); if (pt){ goT(+pt.dataset.pickT); render(); return; }
@@ -1712,7 +1772,7 @@ document.addEventListener('click', e => {
   else if (a === 'vt-extend'){ const pid = +act.dataset.p, ts = act.dataset.ts.split(',').map(Number), p = P(d, pid), old = VT(p).map(c => ({...c}));
     let vt = old; for (const [s, e] of ranges(ts)) vt = extendVt(vt, s, e, act.dataset.mode || 'auto'); closePop();
     commit(`${name(p)}: Vertrag angepasst (${vt.map(vtTxt).join(', ')})`, dd => { P(dd, pid).vt = vt.map(c => ({...c})); }); toast(`Vertrag: ${vt.map(vtTxt).join(', ')}`); }
-  else if (a === 'bed+' || a === 'bed-'){ const g = act.dataset.g, v = Math.max(0, (+d.bedarfEIC[g][tw] || 0) + (a === 'bed+' ? 1 : -1)); commit(`Bedarf ${GROUP[g].n} ${kwLbl(tw)}: ${fmt(v)}`, dd => { dd.bedarfEIC[g][tw] = v; }); }
+  else if (a === 'bed+' || a === 'bed-'){ const g = act.dataset.g, v = Math.max(0, (grpBed(g, tw) ?? 0) + (a === 'bed+' ? 1 : -1)); commit(`Bedarf ${GROUP[g].n} ${kwLbl(tw)}: ${fmt(v)}`, dd => { dd.bedarfEIC[g][tw] = v; }); }
   else if (a === 'abs-pop') openAbsPop(+act.dataset.p, act);
   else if (a === 'back-pop') openMovePop({pid:+act.dataset.p, from:'', kind:act.dataset.kind, to:'FRE', area:'FRE', anchor:act});
   else if (a === 'note-save'){ const pid = +act.dataset.p, v = $('#pop-note').value.trim(), p = P(d, pid); closePop();
@@ -1742,8 +1802,9 @@ document.addEventListener('click', e => {
     const map = k => pj.off + Math.min(k, pj.n - 1);
     if (a === 'std-vj') commit(`Stunden Freiland ${pj.y} nach ${j.y} übernommen`, dd => { for (const r of dd.stunden) if (r.v) for (let k = 0; k < j.n; k++) r.v[j.off + k] = r.v[map(k)]; });
     else if (a === 'bedeic-vj') commit(`Bedarf Eichhof ${pj.y} nach ${j.y} übernommen`, dd => { for (const g of GROUPS) for (let k = 0; k < j.n; k++) dd.bedarfEIC[g.c][j.off + k] = dd.bedarfEIC[g.c][map(k)]; });
-    else if (a === 'bed-vj') commit(`Bedarf ${AREA[ui.bedArea].k} ${pj.y} nach ${j.y} übernommen`, dd => { for (const g of Object.keys(dd.soll[ui.bedArea])) for (let k = 0; k < j.n; k++) dd.soll[ui.bedArea][g][j.off + k] = dd.soll[ui.bedArea][g][map(k)]; });
-    else { const st = stats(); commit(`Bedarf ${AREA[ui.bedArea].k} ${j.y} = eingeplant ${pj.y}`, dd => { for (const g of Object.keys(dd.soll[ui.bedArea])) for (let k = 0; k < j.n; k++) dd.soll[ui.bedArea][g][j.off + k] = r1(st.ist[ui.bedArea][g][map(k)]); }); } }
+    else if (a === 'bed-vj') commit(`Bedarf ${AREA[ui.bedArea].k} ${pj.y} nach ${j.y} übernommen`, dd => { const B = dd.bed[ui.bedArea]; for (const g of Object.keys(B)) for (let k = 0; k < j.n; k++) B[g][j.off + k] = B[g][map(k)]; });
+    else { const st = stats(); commit(`Bedarf ${AREA[ui.bedArea].k} ${j.y} = eingeplant ${pj.y} (gesamt, Frauen, Männer)`, dd => { const B = dd.bed[ui.bedArea], I = st.ist[ui.bedArea];
+      for (let k = 0; k < j.n; k++){ if (B.T) B.T[j.off + k] = r1(I.T[map(k)]); B.F[j.off + k] = r1(I.F[map(k)]); B.M[j.off + k] = r1(I.M[map(k)]); } }); } }
   else if (a === 'p-abs'){ const pid = +act.dataset.p, c = $('#pa-c').value, y = +$('#pa-y').value, j = d.jahre.find(x => x.y === y), v = Math.max(1, Math.min(j.n, +$('#pa-v').value || 1)), b = Math.max(v, Math.min(j.n, +$('#pa-b').value || v)), p = P(d, pid);
     commit(`${name(p)}: ${STN[c]} KW ${v}–${b} ${y}`, dd => { const q = P(dd, pid); for (let k = v; k <= b; k++) q.w[j.off + k - 1] = c; }); openPerson(pid); }
   else if (a === 'p-del'){ const pid = +act.dataset.p, p = P(d, pid);
@@ -1765,8 +1826,8 @@ view.addEventListener('pointerover', e => { if (!drag) return; const td = e.targ
 window.addEventListener('pointerup', () => { if (!drag) return; const s = drag; drag = null; justSelected = true; setTimeout(() => { justSelected = false; }, 0); openPlanPop(s); });
 view.addEventListener('mousemove', e => {
   const h = e.target.closest('rect.hit');
-  if (h){ const c = charts[h.dataset.chart], i = +h.dataset.i, iv = c.ist[i], sv = c.soll[i];
-    showTip(e, `<div><b>KW ${i + 1}</b> <span class="muted">${weekDates(c.ts[i])}</span></div><div>${c.labels[0]}: <b>${fmt(iv)}</b></div><div>${c.labels[1]}: <b>${fmt(sv)}</b></div><div>${stTxt(iv - sv)}</div>`); return; }
+  if (h){ const c = charts[h.dataset.chart], i = +h.dataset.i;
+    showTip(e, `<div><b>KW ${i + 1}</b> <span class="muted">${weekDates(c.ts[i])}</span></div><div>eingeplant: <b>${fmt(c.tAll[i])}</b> (Frauen ${fmt(c.f[i])}, Männer ${fmt(c.m[i])})</div><div>Bedarf: <b>${fmtN(c.bed[i])}</b></div><div>${stTxt(dz(c.tAll[i], c.bed[i]))}</div>`); return; }
   const td = e.target.closest('td.c');
   if (td && !drag && pop.hidden){ const tr = td.parentElement, tb = td.closest('table.selectable');
     if (tb && tr.dataset.ri !== undefined) setFx(selText({grid:tb.dataset.grid, r0:+tr.dataset.ri, r1:+tr.dataset.ri, t0:+td.dataset.t, t1:+td.dataset.t})); }

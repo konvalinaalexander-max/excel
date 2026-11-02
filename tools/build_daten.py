@@ -14,7 +14,6 @@ import re
 import openpyxl
 
 import quellen as q
-from build_personalplanung import aufteilen
 
 GRUPPEN_CODE = {"Steckling": "STK", "Fax 10.5er": "F10", "Fax 13er": "F13",
                 "Verteilen / Topfmaschine": "VER", "Luchs": "LUC"}
@@ -23,16 +22,21 @@ HAUPT_CODE = {"Kräuter Eichhof": "EIC", "Kräuter Juch": "JUC", "Kräuter Feld"
 JAHRE = [{"y": 2026, "n": 53, "off": 0}, {"y": 2027, "n": 52, "off": 53}]
 T = 105
 IMPORT_INFO = [
-    "Eingeplant wird neu aus dem Wochenplan gerechnet. Im Original zählt die Formel bei Blumen in KW 52 und 53 "
-    "die Wochen 2 und 3, und beim Weiterziehen nach 2027 sind weitere Formeln verrutscht.",
-    "Bedarf 2027: Startwerte sind die Zahlen 2026. Im Original steigen die weitergezogenen Reihen ab KW 13 "
-    "jede Woche um 1 (z.B. Blumen bis 70, Eichhof bis 60).",
-    "Bedarf Kräuter Juch ab KW 27: korrigierte Zahlen aus dem Blatt «korrg. Zahlen» (Summe Plan). In der Übersicht "
-    "standen dort noch Vorjahreswerte und Platzhalter (50 in KW 33–44).",
-    "Bedarf Logistik: Zeile «SOLL» der Übersicht.",
-    "Bedarf Gemüse Freiland: aus der Datei Arbeitsplanung Freiland 2026 (Stunden ÷ 52). Sie ist neuer als die Zahlen, "
-    "die in der Übersicht von Hand eingetragen waren (Abweichungen bis 1 Person).",
-    "Bedarf Kräuter Eichhof: Bedarf pro Gruppe aus der Kräuter-Datei (nicht «Summe Plan (Modell)» der Gesamtplanung).",
+    "Bedarf nur als Gesamtzahl: In den Originaldateien steht der Bedarf aller Bereiche nur als Anzahl Personen pro Woche, "
+    "nicht nach Frauen und Männern. «Bedarf Frauen/Männer» bleibt deshalb leer, bis ihr ihn unter Übersicht → Bedarf eingeben erfasst.",
+    "Kräuter Eichhof: Bedarf pro Gruppe aus der Kräuter-Datei (2026 KW 1–52, 2027 KW 1–8). Eine KW 53 gibt es dort nicht. "
+    "Die Gesamtplanung hat für Eichhof «Frauen/Männer Plan» nur in KW 1–8 und 49–53; diese Zahlen passen nicht zum Gruppenbedarf und sind nicht übernommen.",
+    "Gemüse Freiland: Bedarf = Summe Wochenstunden ÷ 52 wie in der Datei Arbeitsplanung Freiland 2026 (KW 1–52). "
+    "KW 53 und 2027 sind dort nicht geplant. Jätstunden wie in der Original-Formel (Salat, Fenchel, Kürbis, Zwiebel, Karotten).",
+    "Kräuter Juch ab KW 27: Zahlen aus dem Blatt «korrg. Zahlen» (Summe Plan, Stand 13.08.2026). In der Übersicht standen dort noch "
+    "Vorjahreswerte und ab KW 33 der Wert 50.",
+    "Logistik: Zeile «SOLL» der Übersicht. Blumen, Tomaten, Kräuter Feld: Zeile «SOLL» der Übersicht.",
+    "2027: aus der Gesamtplanung nur KW 1–12 (dort bewusst verlängert). Ab KW 13 sind die Zahlen im Original durch Weiterziehen "
+    "entstanden (sie steigen jede Woche um 1) und bleiben leer. Freiland und Feld 2027 sind schon ab KW 1 so entstanden und bleiben leer.",
+    "Leere Zellen in einer Bedarfszeile zählen als 0 – so rechnet auch das Original seine Summen. Wochen, die im Original gar nicht "
+    "geplant sind, bleiben leer und erscheinen als «–» (nicht erfasst).",
+    "Eingeplant wird neu aus dem Wochenplan gerechnet. Im Original zählt die Formel bei Blumen in KW 52 und 53 die Wochen 2 und 3.",
+    "Reserve Krank: «Krank Durchschnitt 2023–2025» aus der Übersicht, nur für 2026.",
 ]
 
 
@@ -66,6 +70,49 @@ def zusatz_gesamt(wb):
                     "fs": str(row[ix["FSchein"]] or ""), "zu": str(row[ix["Zustand"]] or ""),
                     "badge": row[ix["Badge"]]})
     return out
+
+
+FUNKTION_GRUPPE = [("luchs", "LUC"), ("13er", "F13"), ("10.5", "F10"), ("10,5", "F10"), ("steckling", "STK"),
+                   ("topf", "VER"), ("verteil", "VER")]   # nur eindeutige Stichworte
+
+
+def gruppen_streng(kraeuter, personen):
+    """Gruppe Eichhof nur aus eindeutigen Angaben: Funktion der Person oder ein genau passender, eindeutiger
+    Name in der Kräuter-Datei. Die Quelle wird gespeichert (gq), Namenszuordnungen gelten als «zu prüfen»."""
+    ws = openpyxl.load_workbook(kraeuter, data_only=True)["Gruppen Kostenstelle 2026"]
+    kandidaten = [p for p in personen if p["hb"] == "EIC" or any("EIC" in (c or "") for c in p["w"])]
+    treffer = {}
+    for gname, _g, _rb, r_pers in q.GRUPPEN:
+        code = GRUPPEN_CODE[gname]
+        for r in r_pers:
+            text = str(ws.cell(r, 5).value or "").strip()
+            if not text:
+                continue
+            for teil in re.split(r"/", text):
+                tok = [t for t in q.norm(teil.replace("(", " ").replace(")", " "))
+                       if t not in ("mann", "fahrer", "ab", "kw") and len(t) > 1]
+                if not tok:
+                    continue
+                passt = [p for p in kandidaten if set(tok) <= set(q.norm(p["vn"]) + q.norm(p["nn"]))]
+                if len(passt) == 1:
+                    treffer.setdefault(passt[0]["id"], set()).add((code, teil.strip()))
+    n_f = n_n = 0
+    for p in personen:
+        p["g"], p["gq"] = "", ""
+        f = (p["fn"] or "").lower()
+        fg = {g for kw, g in FUNKTION_GRUPPE if kw in f}
+        if len(fg) == 1:
+            p["g"], p["gq"] = fg.pop(), f"Funktion: «{p['fn']}»"
+            n_f += 1
+            continue
+        t = treffer.get(p["id"], set())
+        gruppen = {c for c, _ in t}
+        if len(gruppen) == 1:
+            code = gruppen.pop()
+            namen = sorted({n for c, n in t})
+            p["g"], p["gq"] = code, "Kräuter-Datei: «" + "», «".join(namen) + "» bei " + [g for g, c in GRUPPEN_CODE.items() if c == code][0]
+            n_n += 1
+    return n_f, n_n
 
 
 def finde_person(personen, text):
@@ -146,8 +193,6 @@ def aufgaben(pfad):
 
 def daten(gesamt, kraeuter, freiland):
     personen_q, soll = q.lese_gesamt(gesamt)
-    bedarf, kr_namen = q.lese_kraeuter(kraeuter)
-    q.gruppen_zuordnung(personen_q, kr_namen)
     frei = q.lese_freiland(freiland)
     wb = openpyxl.load_workbook(gesamt, data_only=True)
     zusatz = zusatz_gesamt(wb)
@@ -166,41 +211,69 @@ def daten(gesamt, kraeuter, freiland):
             "pa": partner_map.get(pid) if pid is not None else None,
             "hb": HAUPT_CODE.get(p["bereich"], ""), "fs": z["fs"], "zu": z["zu"],
             "ein": z["ein"], "aus": z["aus"], "fn": p["funktion"], "bem": p["bemerkung"],
-            "g": GRUPPEN_CODE.get(p.get("gruppe") or "", ""),
             "w": list(p["wochen"]) + z["w27"],
         })
 
-    def zwei(werte):  # 2027 startet mit den Werten von 2026 (wie im bisherigen File)
-        werte = [round(x, 1) if isinstance(x, (int, float)) else 0 for x in werte]
-        return werte + werte[:52]
-
-    soll_b = {}
-    for code in ("BLU", "TOM", "JUC"):
-        f_ist, m_ist = q.ist_nach_geschlecht(personen_q, code)
-        f, m = aufteilen(soll[code], f_ist, m_ist)
-        soll_b[code] = {"F": zwei(f), "M": zwei(m)}
-    soll_b["FEL"] = {"F": [0] * T, "M": zwei(soll["FEL"])}
-    # Logistik: Zeile "SOLL" der Übersicht (nicht die Summe der Detailzeilen darüber)
     ub = wb["Übersicht"]
-    log = [ub.cell(38, 5 + k).value or 0 for k in range(q.NW)]
-    soll_b["LOG"] = {"F": [0] * T, "M": zwei(log)}
-    f_ist, _m = q.ist_nach_geschlecht(personen_q, "FRE")
-    soll_b["FRE"] = {"F": zwei(f_ist)}
+    leer27 = [None] * 52
 
+    n_f, n_n = gruppen_streng(kraeuter, personen)
+    print(f"Gruppen Eichhof: {n_f} aus der Funktion, {n_n} über den Namen in der Kräuter-Datei (zu prüfen)")
+
+    def zahl(x):
+        return round(x, 2) if isinstance(x, (int, float)) else 0
+
+    def reihe(row, kw27=12, werte26=None):
+        """2026 KW 1–53 aus der Übersicht (leere Zelle = 0), 2027 nur KW 1–kw27, danach leer (None)."""
+        v26 = [zahl(x) for x in werte26] if werte26 is not None else [zahl(ub.cell(row, 5 + k).value) for k in range(53)]
+        v27 = [zahl(ub.cell(row, 5 + 54 + k).value) for k in range(kw27)] + [None] * (52 - kw27)
+        return v26 + v27
+
+    assert ub.cell(2, 5 + 54).value == "27_01"
+    nichts = lambda: [None] * T
+    bed = {
+        "BLU": {"T": reihe(22), "F": nichts(), "M": nichts()},
+        "TOM": {"T": reihe(53), "F": nichts(), "M": nichts()},
+        "JUC": {"T": reihe(68, werte26=soll["JUC"]), "F": nichts(), "M": nichts()},
+        "LOG": {"T": reihe(38), "F": nichts(), "M": nichts()},
+        "FEL": {"T": reihe(47, kw27=0), "F": nichts(), "M": nichts()},
+        "EIC": {"F": nichts(), "M": nichts()},
+        "FRE": {"F": nichts(), "M": nichts()},
+    }
+
+    # Kräuter: Bedarf pro Gruppe, 2026 KW 1–52 und die 2027-Wochen, die in der Datei stehen
+    kws = openpyxl.load_workbook(kraeuter, data_only=True)["Gruppen Kostenstelle 2026"]
+    kopf = {c: kws.cell(1, c).value for c in range(1, kws.max_column + 1)}
+    c26 = 18
+    assert kopf[c26] == 1 and kopf[c26 + 51] == 52
+    c27 = next(c for c in range(c26 + 52, kws.max_column + 1) if kopf.get(c) == 1)
+    n27 = 0
+    while kopf.get(c27 + n27) == n27 + 1:
+        n27 += 1
+    bedarf_eic = {}
+    for gname, _g, r_bed, _r in q.GRUPPEN:
+        v26 = [zahl(kws.cell(r_bed, c26 + k).value) for k in range(52)] + [None]
+        v27 = [zahl(kws.cell(r_bed, c27 + k).value) for k in range(n27)] + [None] * (52 - n27)
+        bedarf_eic[GRUPPEN_CODE[gname]] = v26 + v27
+
+    # Freiland: Stunden KW 1–52; Jätstunden-Zeilen aus der Original-Formel
+    fws = openpyxl.load_workbook(freiland)["Freiland 2024"]
+    jaet_formel = str(fws.cell(49, 3).value or "")
+    jaet_zeilen = {int(x) for x in re.findall(r"C(\d+)", jaet_formel)}
+    assert jaet_zeilen, jaet_formel
     stunden = []
     for z in frei:
         if not z["label"] and not any(v is not None for v in z["werte"]):
             stunden.append({"abstand": True})
             continue
-        stunden.append({"t": z["label"], "n": str(z["notiz"] or ""), "gr": z["gruen"],
-                        "v": zwei([v if v is not None else 0 for v in z["werte"]])})
-    vertraege26 = [sum(1 for p in personen if p["w"][k]) for k in range(52)]
+        v26 = [v if v is not None else 0 for v in z["werte"][:52]] + [None]
+        stunden.append({"t": z["label"], "n": str(z["notiz"] or ""), "gr": z["gruen"], "jaet": z["zeile"] in jaet_zeilen,
+                        "v": v26 + leer27})
     jetzt = datetime.datetime.now().isoformat(timespec="seconds")
     data = {
         "schema": 2, "jahre": JAHRE, "T": T, "personen": personen, "gw": {},
-        "bedarfEIC": {GRUPPEN_CODE[n]: zwei(w) for n, w in bedarf.items()},
-        "soll": soll_b, "stunden": stunden, "std": 52,
-        "vj": [round(x, 1) for x in soll["VJ"]] + vertraege26, "krank": zwei(soll["KRANK"]),
+        "bedarfEIC": bedarf_eic, "bed": bed, "stunden": stunden, "std": 52,
+        "vj": [round(x, 1) for x in soll["VJ"]] + leer27, "krank": [round(x, 2) for x in soll["KRANK"]] + leer27,
         "notes": {}, "wnotes": notizen(wb), "sitzung": {}, "mut": mutationen(wb, personen), "bew": [],
         "trakt": traktanden(wb), "anfragen": [], "aufgaben": aufgaben(kraeuter),
         "log": [{"t": jetzt, "r": "System", "u": "", "x": "Daten aus den Excel-Dateien übernommen (Planung 2026 und 2027)"}],

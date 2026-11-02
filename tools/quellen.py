@@ -83,8 +83,8 @@ def lese_gesamt(pfad):
     }
     juc = []
     for w in range(1, NW + 1):
-        kw = min(w, 52)
-        juc.append(juch_plan[kw] if kw >= 27 and juch_plan.get(kw) is not None else soll["JUC_ERST"][w - 1])
+        # «korrg. Zahlen» reicht bis KW 52; KW 53 kommt aus der Übersicht
+        juc.append(juch_plan[w] if w >= 27 and juch_plan.get(w) is not None else soll["JUC_ERST"][w - 1])
     soll["JUC"] = juc
     return personen, soll
 
