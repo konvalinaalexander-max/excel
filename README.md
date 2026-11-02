@@ -39,39 +39,38 @@ python3 tools/build_web_demo.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.x
 
 Der Prototyp speichert Änderungen nur im eigenen Browser.
 
-## Arbeitsversion (HTML + Daten-Datei auf dem Netzlaufwerk)
+## Arbeitsversion: eine HTML-Datei mit den Daten
 
-`tools/web/personalplanung_app.html` ist das fertige Programm. Es braucht keinen Server und kein
-Internet: Programm und Daten liegen als zwei Dateien im selben Ordner auf dem Netzlaufwerk.
+`tools/web/personalplanung_app.html` ist das Programm (Vorlage ohne Daten). Für den Betrieb wird daraus eine
+einzige Datei `personalplanung.html` gebaut, in der Programm und Daten zusammen stehen. Sie liegt in einem
+Ordner auf dem Netzlaufwerk; es braucht keinen Server und kein Internet.
 
-| Datei | Inhalt |
-|---|---|
-| `personalplanung.html` | das Programm (Kopie von `tools/web/personalplanung_app.html`) |
-| `personalplanung-daten.json` | alle Daten: Personen, Wochenplan 2026/2027, Bedarf, Stunden Freiland, Mutationen, Notizen, Traktanden, Aufgaben, Verlauf |
-| `Sicherungen/` | legt das Programm selbst an: eine Kopie der Daten pro Tag |
-
-- Öffnen mit Microsoft Edge oder Google Chrome, Namen eintragen, Ordner wählen. Beim nächsten Mal
-  genügt „Weiter mit Ordner“.
-- Jede Änderung wird sofort in die Daten-Datei geschrieben, mit Name, Rolle und Zeit im Verlauf.
-- Speichern zwei Personen gleichzeitig, werden die Änderungen zusammengeführt (Versionsnummer in der
-  Datei). Änderungen der anderen lädt das Programm alle 20 Sekunden nach.
-- Andere Browser (z.B. Firefox) können die Daten nur als Arbeitskopie öffnen und herunterladen.
+- **Öffnen** (Doppelklick) zeigt sofort alle Daten, zum Ansehen in jedem Browser.
+- **Speichern** geht mit Microsoft Edge oder Google Chrome: Beim ersten Ändern gibt man einmal den Ordner frei, in
+  dem die Datei liegt. Danach schreibt jede Änderung die Datei neu (nur der Datenblock wird ersetzt).
+- **Mehrere gleichzeitig:** Vor dem Speichern wird die Datei gelesen; hat jemand anderes gespeichert, werden die
+  eigenen Änderungen darübergelegt. Nach dem Speichern wird kontrolliert, ob die eigene Version wirklich in der Datei
+  steht (sonst wird nochmals zusammengeführt). Offene Programme laden fremde Änderungen alle 20 Sekunden nach.
+- **Sicherung:** einmal pro Tag eine Kopie der ganzen Datei im Unterordner `Sicherungen/`.
+- **Datei-Menü:** Kopie herunterladen, Daten übernehmen (aus `personalplanung-daten.json` oder einer älteren
+  `personalplanung.html`), Programm aktualisieren (neue Version einspielen, die Daten bleiben), Kurzanleitung.
 - Alle können alles ändern. Der Verlauf hält fest, wer was wann geändert hat.
 
-Blätter: **Personal** (Wochenplan, Personen mit mehreren Verträgen pro Person, «Prüfen» mit offenen
-Datenfragen), **Übersicht** (Überblick, pro Bereich, Bedarf eingeben), **Personalsitzung** (vier Fenster:
-Wo fehlen Leute? · Mutationen · Anstellen · Notizen und Protokoll), **Kräuter Eichhof** (Brett, Jahresübersicht,
-Aufgaben), **Gemüse Freiland** (Stunden, Bedarf, Team der Woche). Beim Verschieben fragt das Programm immer,
-für welche Wochen es gilt (nur diese Woche, bis KW …, ab dieser Woche).
+Blätter: **Personal** (Wochenplan, Personen mit Verträgen, «Prüfen» mit offenen Datenfragen), **Übersicht**
+(Überblick, pro Bereich, Bedarf eingeben), **Personalsitzung** (Wo fehlen Leute? · Mutationen · Anstellen · Notizen
+und Protokoll), **Kräuter Eichhof** (Brett, Jahresübersicht, Aufgaben), **Gemüse Freiland** (Stunden, Bedarf, Team).
 
-Ältere Daten-Dateien (Eintritt/Austritt als Einzelfelder) stellt das Programm beim Öffnen automatisch um:
-neue Verträge aus «AV …» in der Bemerkung, Verträge aus dem Wochenplan (zum Prüfen markiert), getrennte Namen.
+### Daten nur aus den Originalen
 
-Die Daten-Datei mit den echten Namen erzeugt `tools/build_daten.py` aus den bisherigen Excel-Dateien:
+`tools/build_daten.py` liest die bisherigen Excel-Dateien und schreibt die Daten (JSON). Der Bedarf steht dort nur als
+Gesamtzahl; «Bedarf Frauen/Männer» bleibt leer, bis er im Programm erfasst wird. 2027 nur, soweit im Original bewusst
+eingetragen. Was beim Übernehmen bereinigt wurde, zeigt das Programm unter Personal → Prüfen.
 
 ```bash
-python3 tools/build_daten.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.xlsx \
-  --out personalplanung-daten.json
+python3 tools/build_daten.py --gesamt G.xlsx --kraeuter K.xlsx --freiland F.xlsx --out personalplanung-daten.json
+python3 tools/build_html.py --vorlage tools/web/personalplanung_app.html --daten personalplanung-daten.json \
+  --out personalplanung.html
 ```
 
-Die Daten-Datei enthält Personendaten und gehört nicht ins Repository (siehe `.gitignore`).
+Die Daten-Datei und die fertige `personalplanung.html` enthalten Personendaten und gehören nicht ins Repository
+(siehe `.gitignore`).

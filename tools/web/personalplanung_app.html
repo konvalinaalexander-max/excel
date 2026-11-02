@@ -169,7 +169,7 @@ svg.ch .hit{fill:transparent}
 .lane-h .t small{font-weight:400;color:var(--fg-2)}
 .lane-h .row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-2);flex-wrap:wrap}
 .step{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:3px;background:var(--sheet)}
-.step button{border:0;background:transparent;width:22px;height:22px;color:var(--fg)}
+.step button{border:0;background:transparent;width:26px;height:26px;color:var(--fg);font-size:15px}
 .step b{min-width:26px;text-align:center;font-variant-numeric:tabular-nums;color:var(--fg)}
 .cards{padding:8px;display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:48px}
 .card{background:var(--sheet);border:1px solid var(--line-2);border-radius:3px;padding:5px 8px;display:flex;align-items:center;gap:6px;cursor:grab;font-size:13px;text-align:left}
@@ -219,6 +219,20 @@ table.plain td.n{text-align:right}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* ---------- Ergänzungen Arbeitsversion ---------- */
 [hidden]{display:none!important}
+.namebox button{padding:3px 10px!important;font-size:15px}
+.trow .nt{width:7px;height:7px;border-radius:50%;background:var(--note);flex:none}
+.rqlink{font-size:12px}
+.banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:6px;font-size:13px;background:var(--warn-bg);color:var(--warn-fg);border-bottom:1px solid var(--line-2)}
+.banner b{font-weight:700}
+.banner .btn{background:var(--sheet);color:var(--fg)}
+.menu{display:flex;flex-direction:column;padding:4px}
+.menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:transparent;text-align:left;padding:7px 10px;border-radius:4px;font-size:13px;color:var(--fg)}
+.menu button:hover,.menu button:focus-visible{background:var(--accent-soft)}
+.menu button small{color:var(--fg-2);font-size:12px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.help h4{margin:10px 0 4px;font-size:14px}
+.help p,.help li{font-size:13px;line-height:1.5;margin:0 0 4px}
+.help ul{padding-left:18px;margin:0}
 :root{--chart-f:#c3b1e1;--chart-m:#9dc3e6}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--chart-f:#8f78bf;--chart-m:#4f80ad}}
 :root[data-theme="dark"]{--chart-f:#8f78bf;--chart-m:#4f80ad}
@@ -251,7 +265,7 @@ svg.ch .barX{fill:var(--line-2)}
 .save{font-size:12px;border:1px solid rgba(255,255,255,.55);border-radius:10px;padding:1px 9px;white-space:nowrap;background:transparent;color:var(--accent-ink)}
 .save.err{background:#c42b1c;border-color:#c42b1c}
 .who{border:0!important;font-weight:700}
-.start{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding-block:48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.start{position:fixed;inset:0;z-index:15;background:var(--bg);overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding-block:48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .start .box{background:var(--sheet);border:1px solid var(--line-2);border-radius:6px;max-width:640px;width:100%;padding:24px 26px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow)}
 .start h1{margin:0;font-size:22px;color:var(--accent)}
 .start p{margin:0;line-height:1.5}
@@ -262,12 +276,13 @@ svg.ch .barX{fill:var(--line-2)}
 .trow{display:flex;align-items:center;gap:6px;border:1px solid var(--line-2);border-radius:3px;padding:4px 6px;background:var(--sheet);font-size:13px}
 .trow.grey{background:var(--head);color:var(--fg-2);border-style:dotted}
 .trow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.trow button{border:1px solid var(--line-2);background:var(--sheet);border-radius:3px;font-size:11px;padding:1px 6px;white-space:nowrap}
+.trow button{border:1px solid var(--line-2);background:var(--sheet);border-radius:3px;font-size:12px;padding:3px 8px;white-space:nowrap;min-height:26px}
 .trow .nm .lnk{border:0;background:transparent;font-size:13px;padding:0}
 .trow .fm{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:2px;padding:0 3px}
 .trow .tag{font-size:10px;color:var(--fg-2);white-space:nowrap}
 .xs{font-size:12px;color:var(--fg-2)}
-.del{border:0;background:transparent;color:var(--fg-3);font-size:15px;line-height:1;padding:0 4px}
+.del{border:0;background:transparent;color:var(--fg-3);font-size:16px;line-height:1;min-width:26px;min-height:26px;padding:0 4px;border-radius:3px}
+.del:hover{background:var(--bad-bg)}
 .del:hover{color:var(--note)}
 h3 .n{font-weight:400;color:var(--fg-3)}
 [data-tedit],[data-aedit]{cursor:text}
@@ -333,10 +348,12 @@ details[open]>summary{margin-bottom:8px}
 <header class="appbar gut">
   <div class="brand"><span class="logo" aria-hidden="true">PP</span>Personalplanung<button class="save" id="save" title="Speicherstand">–</button></div>
   <div class="tools">
-    <button id="b-who" class="who" title="Name ändern"></button>
+    <button id="b-who" class="who" title="Dein Name – steht bei jeder Änderung im Verlauf"></button>
     <button id="b-undo" title="Rückgängig (Ctrl+Z)">↶ Rückgängig</button>
     <button id="b-redo" title="Wiederholen (Ctrl+Y)" aria-label="Wiederholen">↷</button>
     <button id="b-log">Verlauf</button>
+    <button id="b-file" aria-haspopup="menu">Datei ▾</button>
+    <button id="b-help" title="Kurzanleitung" aria-label="Kurzanleitung">?</button>
   </div>
 </header>
 <div class="fbar gut">
@@ -347,6 +364,7 @@ details[open]>summary{margin-bottom:8px}
   <span class="fx">fx</span>
   <div class="fxtext" id="fx"></div>
 </div>
+<div id="banner" class="banner gut" hidden></div>
 <main id="view"></main>
 <nav class="tabbar gut" id="tabs" role="tablist" aria-label="Blätter"></nav>
 <div id="pop" class="pop" hidden></div>
@@ -354,7 +372,8 @@ details[open]>summary{margin-bottom:8px}
 <div id="toast" class="toast" hidden></div>
 <aside id="drawer" class="drawer" hidden></aside>
 <div id="start" class="start"></div>
-<input type="file" id="file-in" accept=".json,application/json" hidden>
+<input type="file" id="file-in" accept=".html,.htm,.json,text/html,application/json" hidden>
+<script type="application/json" id="pp-daten">null</script>
 
 <script>
 'use strict';
@@ -523,20 +542,38 @@ function migrate(dd){
   return changed;
 }
 
-/* ---------- Speichern im Ordner auf dem Netzlaufwerk ---------- */
+/* ---------- Speichern: die Daten stehen in dieser HTML-Datei ----------
+   Ansehen geht sofort. Zum Speichern braucht das Programm einmal die Erlaubnis für den Ordner,
+   in dem die Datei liegt (Edge/Chrome). Jede Änderung schreibt die Datei neu: vorher wird sie
+   gelesen (hat jemand anderes gespeichert, werden die eigenen Änderungen darübergelegt), nachher
+   wird kontrolliert, ob die eigene Version wirklich drin steht. Einmal pro Tag eine Sicherung. */
 const FS = 'showDirectoryPicker' in window;
-const store = {mode:'none', dir:null, version:0, lastMod:0, pending:[], saving:false, timer:null, state:'', savedAt:null};
+const DATA_OPEN = '<script type="application/json" id="pp-' + 'daten">', DATA_CLOSE = '</' + 'script>';
+const OWN = decodeURIComponent(location.pathname.split('/').pop() || '') || 'personalplanung.html';
+const PROG = '<!doctype html>\n' + document.documentElement.outerHTML;
+const enc = obj => JSON.stringify(obj).replace(/</g, '\\u003c');
+function extractData(text){ const i = text.indexOf(DATA_OPEN); if (i < 0) return null; const a = i + DATA_OPEN.length, j = text.indexOf(DATA_CLOSE, a); if (j < 0) return null;
+  let obj; try { obj = JSON.parse(text.slice(a, j)); } catch (e) { obj = undefined; } return {obj, a, j}; }
+const withData = (text, x, obj) => text.slice(0, x.a) + enc(obj) + text.slice(x.j);
+function validData(obj){ return !!obj && obj.format === 'personalplanung' && !!obj.data && Array.isArray(obj.data.personen) && !!obj.data.jahre; }
+const store = {mode:'view', dir:null, fh:null, saved:null, version:0, lastMod:0, pending:[], saving:false, timer:null, state:'', savedAt:null, newProg:null};
 let past = [], future = [], backupDay = null, pollT = null;
 function idb(){ return new Promise((res, rej) => { const r = indexedDB.open('personalplanung', 1);
   r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
 async function idbGet(k){ const db = await idb(); return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
 async function idbSet(k, v){ const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
 function setSave(state, info){
-  store.state = state; const b = $('#save'); b.classList.toggle('err', state === 'error' || state === 'local');
-  const t = store.savedAt ? new Date(store.savedAt).toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'}) : '';
-  b.textContent = state === 'saving' ? 'speichert …' : state === 'pending' ? 'Änderung …' : state === 'saved' ? `● gespeichert ${t}`
-    : state === 'error' ? 'nicht gespeichert – erneut versuchen' : state === 'local' ? 'Arbeitskopie – herunterladen' : '–';
-  b.title = info || (store.dir ? `Ordner: ${store.dir.name} · Datei: ${FILE}` : '');
+  store.state = state; const b = $('#save');
+  const t = store.savedAt ? new Date(store.savedAt).toLocaleString('de-CH', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
+  const L = {view:'Nur ansehen · bearbeiten', unsaved:'Nicht gespeichert · Speichern erlauben', pending:'Änderung …', saving:'speichert …', saved:`● gespeichert ${t}`,
+    error:'Nicht gespeichert · erneut versuchen', nofs:'Nicht gespeichert · Kopie herunterladen', nofs0:'Nur ansehen'};
+  b.textContent = L[state] || '–'; b.classList.toggle('err', ['unsaved', 'error', 'nofs'].includes(state));
+  b.title = info || (state === 'saved' && store.dir ? `Gespeichert in «${OWN}» im Ordner «${store.dir.name}»` : state === 'view' ? 'Zum Bearbeiten einmal den Ordner freigeben, in dem diese Datei liegt' : '');
+  const ban = $('#banner');
+  if (state === 'unsaved'){ ban.hidden = false; ban.innerHTML = `<b>Deine Änderungen sind noch nicht gespeichert.</b><span>Das Programm braucht einmal die Erlaubnis für den Ordner, in dem «${esc(OWN)}» liegt.</span><button class="btn sm" data-act="connect">Speichern erlauben</button>`; }
+  else if (state === 'nofs'){ ban.hidden = false; ban.innerHTML = `<b>Dieser Browser kann nicht direkt speichern.</b><span>Bitte die Datei mit Microsoft Edge oder Google Chrome öffnen – oder eine Kopie mit den Änderungen herunterladen.</span><button class="btn sm" data-act="download">Kopie herunterladen</button>`; }
+  else if (state === 'error'){ ban.hidden = false; ban.innerHTML = `<b>Speichern hat nicht geklappt.</b><span>${esc(info || '')}</span><button class="btn sm" data-act="retry">Nochmals versuchen</button>`; }
+  else ban.hidden = true;
 }
 function commit(msg, fn){
   if (!d) return;
@@ -545,46 +582,52 @@ function commit(msg, fn){
   const op = dd => { fn(dd); if (msg){ dd.log.unshift({t:new Date().toISOString(), u:user, x:msg}); if (dd.log.length > 5000) dd.log.length = 5000; } };
   op(d); queueSave({fn:op}); render();
 }
+function schedule(ms){ clearTimeout(store.timer); store.timer = setTimeout(flush, ms); }
+let askedConnect = false;
 function queueSave(op){
-  if (store.mode === 'file'){ setSave('local'); return; }
-  if (store.mode !== 'fs') return;
-  store.pending.push(op); setSave('pending'); clearTimeout(store.timer); store.timer = setTimeout(flush, 600);
+  store.pending.push(op);
+  if (store.mode === 'fs'){ setSave('pending'); schedule(500); return; }
+  setSave(store.mode === 'nofs' ? 'nofs' : 'unsaved');
+  if (store.mode === 'view' && !askedConnect){ askedConnect = true; setTimeout(() => { if (pop.hidden && drawer.hidden) openConnect(); }, 0); }
 }
-async function readFile(){ const fh = await store.dir.getFileHandle(FILE, {create:true}); const f = await fh.getFile(); return {fh, f, text:await f.text()}; }
+function merge(cur){
+  const fresh = cur.data; migrate(fresh); let lost = 0;
+  for (const op of store.pending){ if (op.replace){ lost++; continue; } try { op.fn(fresh); } catch (e) { lost++; } }
+  d = fresh; store.version = cur.version || 0; past = []; future = [];
+  toast(`${cur.von || 'Jemand'} hat inzwischen gespeichert. Deine Änderungen wurden dazugenommen${lost ? ` (${lost} Schritt${lost > 1 ? 'e' : ''} nicht möglich)` : ''}.`);
+}
 async function flush(){
   if (store.mode !== 'fs' || store.saving || !store.pending.length) return;
-  store.saving = true; setSave('saving');
-  const ops = store.pending.slice();
+  store.saving = true; clearTimeout(store.timer); setSave('saving');
+  const ops = store.pending.slice(); let again = 0;
   try {
-    const {fh, text} = await readFile();
-    let cur = null; try { cur = JSON.parse(text); } catch (e) { cur = null; }
-    if (cur && cur.data && (cur.version || 0) !== store.version){
-      const fresh = cur.data; migrate(fresh); let lost = 0;
-      for (const op of store.pending){ if (op.replace){ lost++; continue; } try { op.fn(fresh); } catch (e) { lost++; } }
-      d = fresh; store.version = cur.version || 0; past = []; future = [];
-      toast(`${cur.von || 'Jemand'} hat inzwischen gespeichert. Deine Änderungen wurden dazugenommen${lost ? ` (${lost} Schritt${lost > 1 ? 'e' : ''} nicht möglich)` : ''}.`);
-    }
+    const f = await store.fh.getFile(), text = await f.text(), x = extractData(text);
+    if (!x || (x.obj !== null && !validData(x.obj))) throw new Error(`«${OWN}» ist keine Personalplanung oder beschädigt.`);
+    if (x.obj && (x.obj.version || 0) !== store.version) merge(x.obj);
+    let base = text, bx = x;
+    if (store.newProg){ const nx = extractData(store.newProg); if (nx){ base = store.newProg; bx = nx; } }
     await backup(text);
-    const now = new Date().toISOString();
-    const out = {format:'personalplanung', version:store.version + 1, gespeichert:now, von:ui.user || '', data:d};
-    const w = await fh.createWritable(); await w.write(JSON.stringify(out)); await w.close();
-    store.version += 1; store.savedAt = now;
+    const sid = Math.random().toString(36).slice(2) + Date.now().toString(36), now = new Date().toISOString();
+    const out = {format:'personalplanung', version:store.version + 1, gespeichert:now, von:ui.user || '', sid, data:d};
+    const w = await store.fh.createWritable(); await w.write(withData(base, bx, out)); await w.close();
+    const f2 = await store.fh.getFile(), y = extractData(await f2.text());
+    if (y && y.obj && y.obj.sid !== sid && (y.obj.version || 0) <= out.version){ merge(y.obj); again = 300; return; }
+    store.version = out.version; store.savedAt = now; store.lastMod = y && y.obj && y.obj.sid === sid ? f2.lastModified : 0;
     store.pending.splice(0, ops.length);
-    const f2 = await fh.getFile(); store.lastMod = f2.lastModified;
+    if (store.newProg && base === store.newProg){ store.newProg = null; toast('Programm aktualisiert. Die Seite wird neu geladen …'); setTimeout(() => location.reload(), 1500); }
     setSave(store.pending.length ? 'pending' : 'saved');
   } catch (e) {
-    setSave('error', 'Speichern fehlgeschlagen: ' + (e && e.message ? e.message : e) + ' – neuer Versuch in 10 Sekunden.');
-    clearTimeout(store.timer); store.timer = setTimeout(flush, 10000);
+    setSave('error', (e && e.message ? e.message : String(e)) + ' Neuer Versuch in 10 Sekunden.'); again = 10000;
   } finally {
     store.saving = false;
-    if (store.pending.length && store.state !== 'error') store.timer = setTimeout(flush, 400);
+    if (again) schedule(again); else if (store.pending.length) schedule(300);
     render();
   }
 }
 async function backup(text){
   const day = new Date().toISOString().slice(0, 10);
-  if (backupDay === day || !text) return;
-  try { const bd = await store.dir.getDirectoryHandle(BACKUPDIR, {create:true}); const nm = `personalplanung-daten_${day}.json`;
+  if (backupDay === day || !text || !store.dir) return;
+  try { const bd = await store.dir.getDirectoryHandle(BACKUPDIR, {create:true}); const nm = `${OWN.replace(/\.html?$/i, '')}_${day}.html`;
     let exists = true; try { await bd.getFileHandle(nm); } catch (e) { exists = false; }
     if (!exists){ const fh = await bd.getFileHandle(nm, {create:true}); const w = await fh.createWritable(); await w.write(text); await w.close(); }
     backupDay = day; } catch (e) { /* Sicherung ist nicht kritisch */ }
@@ -592,86 +635,130 @@ async function backup(text){
 async function checkRemote(){
   if (store.mode !== 'fs' || store.saving || store.pending.length || document.hidden) return;
   if (!$('#pop').hidden || (document.activeElement && document.activeElement.closest('input,textarea,select') && document.activeElement.closest('#view,#drawer'))) return;
-  try { const {f, text} = await readFile(); if (f.lastModified === store.lastMod) return;
-    const obj = JSON.parse(text); store.lastMod = f.lastModified;
-    if ((obj.version || 0) === store.version || !obj.data) return;
-    d = obj.data; store.version = obj.version || 0; store.savedAt = obj.gespeichert; past = []; future = [];
+  try { const f = await store.fh.getFile(); if (f.lastModified === store.lastMod) return;
+    const x = extractData(await f.text()); store.lastMod = f.lastModified;
+    if (!x || !validData(x.obj) || (x.obj.version || 0) === store.version) return;
+    d = x.obj.data; store.version = x.obj.version || 0; store.savedAt = x.obj.gespeichert; past = []; future = [];
     if (migrate(d)) queueSave({fn:dd => migrate(dd)});
-    render(); setSave('saved'); toast(`Neue Änderungen geladen${obj.von ? ' (von ' + obj.von + ')' : ''}.`);
+    render(); setSave(store.pending.length ? 'pending' : 'saved'); toast(`Neue Änderungen geladen${x.obj.von ? ' (von ' + x.obj.von + ')' : ''}.`);
   } catch (e) { /* nächster Versuch */ }
 }
 function startPolling(){ clearInterval(pollT); if (store.mode === 'fs') pollT = setInterval(checkRemote, window.PP_POLL || 20000); }
-window.addEventListener('beforeunload', e => { if (store.pending.length || store.saving || store.state === 'local'){ e.preventDefault(); e.returnValue = ''; } });
-function validData(obj){ return obj && obj.format === 'personalplanung' && obj.data && Array.isArray(obj.data.personen) && obj.data.jahre; }
-async function openFolder(dir){
-  let fh = null; try { fh = await dir.getFileHandle(FILE); } catch (e) { fh = null; }
-  store.dir = dir;
-  if (!fh){ showStart('missing'); return; }
-  const f = await fh.getFile(); let obj = null; try { obj = JSON.parse(await f.text()); } catch (e) { obj = null; }
-  if (!validData(obj)){ showStart('bad'); return; }
-  store.mode = 'fs'; store.version = obj.version || 0; store.lastMod = f.lastModified; store.savedAt = obj.gespeichert;
-  d = obj.data; const changed = migrate(d); afterLoad(); setSave('saved');
-  if (changed){ queueSave({fn:dd => migrate(dd)}); toast('Daten auf die neue Version umgestellt und bereinigt. Was geändert wurde: Personal → Prüfen.'); }
+window.addEventListener('beforeunload', e => { if (store.pending.length || store.saving){ e.preventDefault(); e.returnValue = ''; } });
+
+/* Ordner freigeben */
+async function openConnect(msg){
+  if (!d) return;
+  if (!FS){ toast('Dieser Browser kann nicht speichern. Bitte Edge oder Chrome verwenden.'); return; }
+  try { store.saved = await idbGet('dir'); } catch (e) { store.saved = null; }
+  const sv = store.saved;
+  openPop(`${popHead('Speichern erlauben')}<div class="pop-sec">
+    <span>Die Daten stehen in dieser Datei. Damit Änderungen gespeichert werden, braucht das Programm einmal die Erlaubnis für den Ordner, in dem <b>${esc(OWN)}</b> liegt (auf dem Netzlaufwerk).</span>
+    <label class="lbl" for="cn-user">Dein Name (steht im Verlauf)</label><input id="cn-user" value="${esc(ui.user)}" placeholder="Vorname Nachname" autocomplete="name">
+    ${msg ? `<span class="st bad" style="white-space:normal">${esc(msg)}</span>` : ''}</div>
+    <div class="pop-f" style="flex-wrap:wrap">${sv ? `<button class="btn primary" data-cn="re">Weiter mit Ordner «${esc(sv.name)}»</button><button class="btn" data-cn="pick">Anderen Ordner</button>` : `<button class="btn primary" data-cn="pick">Ordner wählen</button>`}
+    <span class="xs" style="flex-basis:100%">Danach fragt der Browser einmal: «Änderungen speichern?» → Zulassen.</span></div>`, null, {type:'connect'});
+  const i = $('#cn-user'); if (!ui.user) i.focus();
 }
-function afterLoad(){ $('#start').hidden = true; goT(todayT()); past = []; future = []; render(); startPolling(); }
-async function pickFolder(){
-  try { const dir = await window.showDirectoryPicker({id:'personalplanung', mode:'readwrite'}); try { await idbSet('dir', dir); } catch (e) {}
-    await openFolder(dir); } catch (e) { if (e && e.name !== 'AbortError') showStart('err', e.message); }
+async function doConnect(how){
+  const nm = ($('#cn-user').value || '').trim();
+  if (!nm){ $('#cn-user').focus(); toast('Bitte zuerst deinen Namen eintragen.'); return; }
+  ui.user = nm; saveUi();
+  try {
+    let dir = null;
+    if (how === 're' && store.saved){ dir = store.saved; if ((await dir.requestPermission({mode:'readwrite'})) !== 'granted') dir = null; }
+    if (!dir) dir = await window.showDirectoryPicker({id:'personalplanung', mode:'readwrite'});
+    await connectDir(dir);
+  } catch (e) { if (e && e.name !== 'AbortError') openConnect('Das hat nicht geklappt: ' + (e.message || e)); }
 }
-async function reconnect(){
-  try { const dir = await idbGet('dir'); if (!dir){ showStart('first'); return; }
-    const perm = await dir.requestPermission({mode:'readwrite'}); if (perm !== 'granted'){ showStart('first'); return; }
-    await openFolder(dir); } catch (e) { showStart('err', e.message); }
+async function connectDir(dir){
+  let fh = null; try { fh = await dir.getFileHandle(OWN); } catch (e) { fh = null; }
+  if (!fh){ openConnect(`Im Ordner «${dir.name}» liegt keine Datei «${OWN}». Bitte den Ordner wählen, in dem diese Datei liegt.`); return; }
+  const f = await fh.getFile(), x = extractData(await f.text());
+  if (!x || (x.obj !== null && !validData(x.obj))){ openConnect(`«${OWN}» im Ordner «${dir.name}» ist keine Personalplanung.`); return; }
+  try { await idbSet('dir', dir); } catch (e) {}
+  store.dir = dir; store.fh = fh; store.mode = 'fs'; store.lastMod = f.lastModified; store.saved = dir;
+  closePop(); startPolling();
+  if (!store.pending.length){
+    if (x.obj && (x.obj.version || 0) !== store.version){ d = x.obj.data; store.version = x.obj.version || 0; past = []; future = []; store.mig = migrate(d); }
+    store.savedAt = x.obj ? x.obj.gespeichert : null;
+    if (store.mig){ store.mig = false; queueSave({fn:dd => migrate(dd)}); } else setSave('saved');
+    render();
+  } else { setSave('pending'); flush(); }
+  toast(`Verbunden mit «${dir.name}». Jede Änderung wird jetzt sofort gespeichert.`);
 }
-function readJsonFile(file){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => { try { res(JSON.parse(r.result)); } catch (e) { rej(e); } }; r.onerror = () => rej(r.error); r.readAsText(file); }); }
+
+/* Datei-Menü: Kopie, Daten übernehmen, Programm aktualisieren */
+function fileMenu(){
+  const conn = store.mode === 'fs';
+  openPop(`<div class="menu" role="menu">
+    ${conn ? `<button disabled><b>Verbunden</b><small>Ordner «${esc(store.dir.name)}» · Datei «${esc(OWN)}»</small></button>` : `<button data-menu="connect"><b>Speichern erlauben …</b><small>einmal den Ordner dieser Datei freigeben</small></button>`}
+    <hr><button data-menu="print"><b>Drucken</b><small>aktuelles Blatt</small></button>
+    <button data-menu="download"><b>Kopie herunterladen</b><small>diese Datei mit allen Daten – nicht weiterschicken</small></button>
+    <hr><button data-menu="import"><b>Daten übernehmen …</b><small>aus einer älteren personalplanung.html oder personalplanung-daten.json</small></button>
+    <button data-menu="update"><b>Programm aktualisieren …</b><small>neue Programm-Version einspielen, die Daten bleiben</small></button>
+    <hr><button data-menu="help"><b>Kurzanleitung</b></button></div>`, $('#b-file'), {type:'menu'});
+}
+function downloadCopy(){
+  const x = extractData(PROG); if (!x){ toast('Kopie nicht möglich.'); return; }
+  const out = {format:'personalplanung', version:store.version, gespeichert:new Date().toISOString(), von:ui.user || '', data:d};
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([withData(PROG, x, out)], {type:'text/html'})); a.download = OWN;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Kopie heruntergeladen. Sie enthält alle Namen – bitte nicht weiterschicken.');
+}
 let fileTarget = null;
+function pickFile(target){ fileTarget = target; const i = $('#file-in'); i.accept = target === 'update' ? '.html,.htm,text/html' : '.html,.htm,.json,text/html,application/json'; i.click(); }
 $('#file-in').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = ''; if (!file) return;
-  let obj; try { obj = await readJsonFile(file); } catch (err) { showStart('bad'); return; }
-  if (!validData(obj)){ showStart('bad'); return; }
-  if (fileTarget === 'copy' && store.dir){
-    try { const fh = await store.dir.getFileHandle(FILE, {create:true}); const w = await fh.createWritable(); await w.write(JSON.stringify(obj)); await w.close(); await openFolder(store.dir); }
-    catch (err) { showStart('err', err.message); }
-  } else { store.mode = 'file'; store.version = obj.version || 0; d = obj.data; migrate(d); afterLoad(); setSave('local'); }
+  const text = await file.text();
+  if (fileTarget === 'update'){
+    const x = extractData(text);
+    if (!x || !/Personalplanung/.test(text)){ toast('Diese Datei ist kein Personalplanungs-Programm.'); return; }
+    if (store.mode !== 'fs'){ toast('Zuerst «Speichern erlauben» – dann nochmals «Programm aktualisieren».'); openConnect(); return; }
+    store.newProg = text; queueSave({fn:() => {}}); return;
+  }
+  let obj = null;
+  if (/^\s*\{/.test(text)){ try { obj = JSON.parse(text); } catch (err) { obj = null; } } else { const x = extractData(text); obj = x ? x.obj : null; }
+  if (!validData(obj)){ toast('In dieser Datei sind keine Daten der Personalplanung.'); return; }
+  const stand = obj.gespeichert ? new Date(obj.gespeichert).toLocaleString('de-CH') : 'unbekannt';
+  openPop(`${popHead('Daten übernehmen?')}<div class="pop-sec"><span>Aus «${esc(file.name)}»: ${obj.data.personen.length} Personen, gespeichert ${esc(stand)}${obj.von ? ' von ' + esc(obj.von) : ''}.</span>
+    <span class="st warn" style="white-space:normal">Die jetzigen Daten werden ersetzt.${store.mode === 'fs' ? ' Eine Sicherung des heutigen Stands liegt im Ordner «' + BACKUPDIR + '».' : ''}</span></div>
+    <div class="pop-f"><span class="sp"></span><button class="btn" data-pop="close">Abbrechen</button><button class="btn primary" data-act="import-ok">Übernehmen</button></div>`, null, {type:'import', obj, fname:file.name});
 });
-function downloadData(){
-  const out = {format:'personalplanung', version:(store.version || 0) + 1, gespeichert:new Date().toISOString(), von:ui.user || '', data:d};
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], {type:'application/json'})); a.download = FILE;
-  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  store.version += 1; toast('Datei heruntergeladen. Bitte die alte Datei auf dem Netzlaufwerk damit ersetzen.');
+function doImport(){
+  const s = popState; closePop();
+  const json = JSON.stringify(s.obj.data);
+  if (!d){ d = JSON.parse(json); migrate(d); goT(todayT()); $('#start').hidden = true; queueSave({fn:dd => { for (const k of Object.keys(dd)) delete dd[k]; Object.assign(dd, JSON.parse(json)); migrate(dd); }}); render(); return; }
+  commit(`Daten übernommen aus «${s.fname}»`, dd => { for (const k of Object.keys(dd)) delete dd[k]; Object.assign(dd, JSON.parse(json)); migrate(dd); });
+  toast('Daten übernommen.');
 }
-async function showStart(mode, info){
+function openHelp(){
+  drawer.innerHTML = `${drawerHead('Kurzanleitung')}<div class="body help">
+    <h4>Speichern</h4><p>Die Daten stehen in dieser Datei. Beim ersten Ändern fragt das Programm einmal nach dem Ordner, in dem die Datei liegt. Danach wird jede Änderung sofort gespeichert – oben steht «● gespeichert».</p>
+    <p>Mehrere Personen können gleichzeitig arbeiten. Speichert jemand anderes, lädt das Programm die Änderungen nach spätestens 20 Sekunden. Einmal pro Tag liegt eine Sicherung im Unterordner «${BACKUPDIR}».</p>
+    <h4>Woche wählen</h4><p>Oben links: ‹ KW › und das Jahr. «zur aktuellen Woche» springt zurück. Ein Klick auf eine Wochennummer in einer Tabelle wählt diese Woche.</p>
+    <h4>Personal</h4><ul><li><b>Wochenplan:</b> Felder markieren (mit der Maus über mehrere Wochen und Personen ziehen), dann Bereich, Ferien/Krank/Unfall oder Kommentar wählen. Zwei Bereiche = je halb.</li>
+      <li><b>Personen:</b> Angaben direkt in der Tabelle ändern. «öffnen» zeigt Verträge, Abwesenheiten und Kommentare.</li>
+      <li><b>Prüfen:</b> fehlende Angaben und Widersprüche mit Korrektur per Klick.</li></ul>
+    <h4>Kräuter Eichhof</h4><p>Karten in eine andere Gruppe ziehen – das Programm fragt, für welche Wochen. Karte anklicken: Abwesenheit, Kommentar, alle Angaben. Bedarf pro Gruppe mit − / +.</p>
+    <h4>Gemüse Freiland</h4><p>Stunden pro Tätigkeit eintragen (Tab = nächste Woche). Bedarf = Stunden ÷ Stunden pro Person. Unten das Team der Woche.</p>
+    <h4>Übersicht und Bedarf</h4><p>Bedarf steht in den Originaldaten nur als Gesamtzahl. Unter «Bedarf eingeben» lassen sich Frauen und Männer erfassen. «–» heisst: nicht erfasst.</p>
+    <h4>Personalsitzung</h4><p>Vier Fenster nach Wichtigkeit: wo fehlen Leute (Feld anklicken → wer kann aushelfen), Mutationen, Anstellen, Notizen und Protokoll.</p>
+    <h4>Rückgängig und Verlauf</h4><p>«↶ Rückgängig» (Ctrl+Z) nimmt den letzten Schritt zurück. Der Verlauf zeigt jede Änderung mit Name und Zeit.</p>
+    <h4>Neue Programm-Version</h4><p>Datei ▾ → «Programm aktualisieren …» und die neue Datei wählen. Die Daten bleiben erhalten.</p></div>`;
+  drawer.hidden = false; drawer.dataset.pid = '';
+}
+function showEmpty(){
   const st = $('#start'); st.hidden = false;
-  let saved = null; if (FS && mode !== 'missing' && mode !== 'bad'){ try { saved = await idbGet('dir'); } catch (e) { saved = null; } }
-  if (FS && !mode) mode = saved ? 'reconnect' : 'first';
-  if (!FS) mode = mode === 'bad' ? 'bad' : 'nofs';
-  const msg = {missing:`Im Ordner «${esc(store.dir ? store.dir.name : '')}» liegt keine Datei <b>${FILE}</b>. Lege die mitgelieferte Datei hinein oder wähle sie hier aus – sie wird dann in diesen Ordner kopiert.`,
-    bad:'Diese Datei ist keine Daten-Datei der Personalplanung.', err:'Das hat nicht geklappt: ' + esc(info || '')}[mode];
-  st.innerHTML = `<div class="box"><h1>Personalplanung</h1>
-    <p>Die Daten liegen in der Datei <b>${FILE}</b> in einem Ordner auf dem Netzlaufwerk. Alle verbinden sich mit demselben Ordner. Jede Änderung wird sofort dort gespeichert, und einmal pro Tag legt das Programm eine Sicherung im Unterordner «${BACKUPDIR}» an.</p>
-    <div class="row"><label for="st-user" class="xs">Dein Name</label><input id="st-user" class="inp" value="${esc(ui.user)}" placeholder="Vorname Nachname" style="flex:1;min-width:180px" autocomplete="name"></div>
-    <div class="msg" id="st-msg" hidden>Bitte zuerst deinen Namen eintragen. Er steht bei jeder Änderung im Verlauf.</div>
-    ${msg ? `<div class="msg">${msg}</div>` : ''}
-    ${mode === 'reconnect' && saved ? `<div class="row"><button class="btn primary" data-st="reconnect">Weiter mit Ordner «${esc(saved.name)}»</button><button class="btn" data-st="pick">Anderen Ordner wählen</button></div>` : ''}
-    ${mode === 'first' || mode === 'err' ? `<div class="row"><button class="btn primary" data-st="pick">Ordner auf dem Netzlaufwerk wählen</button></div>` : ''}
-    ${mode === 'missing' ? `<div class="row"><button class="btn primary" data-st="copy">Daten-Datei auswählen</button><button class="btn" data-st="pick">Anderen Ordner wählen</button></div>` : ''}
-    ${mode === 'nofs' || mode === 'bad' ? `<p>${FS ? '' : 'Dieser Browser kann nicht direkt auf das Netzlaufwerk speichern. Bitte die Datei mit <b>Microsoft Edge</b> oder <b>Google Chrome</b> öffnen.'}</p>
-      <div class="row"><button class="btn" data-st="open">Daten-Datei trotzdem öffnen (Arbeitskopie)</button></div>` : ''}
-    <ol class="xs"><li>Beide Dateien (<b>personalplanung.html</b> und <b>${FILE}</b>) in denselben Ordner auf dem Netzlaufwerk legen.</li>
-      <li>personalplanung.html mit Edge oder Chrome öffnen, Namen eintragen und den Ordner wählen.</li>
-      <li>Beim nächsten Mal genügt «Weiter mit Ordner». Der Browser fragt jeweils einmal nach der Erlaubnis.</li></ol></div>`;
+  st.innerHTML = `<div class="box"><h1>Personalplanung</h1><p>In dieser Datei sind noch keine Daten.</p>
+    <div class="row"><button class="btn primary" data-st="import">Daten übernehmen …</button></div>
+    <p class="xs">Wähle die bisherige <b>personalplanung-daten.json</b> oder eine ältere <b>personalplanung.html</b>. Danach fragt das Programm nach dem Ordner, in dem diese Datei liegt, und speichert die Daten hinein.</p></div>`;
 }
-$('#start').addEventListener('click', e => {
-  const b = e.target.closest('[data-st]'); if (!b) return;
-  const nm = ($('#st-user').value || '').trim();
-  if (!nm){ $('#st-msg').hidden = false; $('#st-user').focus(); return; }
-  ui.user = nm; saveUi();
-  const a = b.dataset.st;
-  if (a === 'pick') pickFolder(); else if (a === 'reconnect') reconnect();
-  else if (a === 'copy'){ fileTarget = 'copy'; $('#file-in').click(); } else if (a === 'open'){ fileTarget = 'open'; $('#file-in').click(); }
-});
-$('#save').addEventListener('click', () => { if (store.mode === 'file') downloadData(); else if (store.state === 'error' && store.pending.length) flush(); });
-window.PP_TEST = {store, flush, checkRemote, get d(){ return d; }};
+$('#start').addEventListener('click', e => { if (e.target.closest('[data-st="import"]')) pickFile('import'); });
+$('#save').addEventListener('click', () => { const s = store.state;
+  if (s === 'view' || s === 'unsaved') openConnect(); else if (s === 'error') flush(); else if (s === 'nofs' || s === 'nofs0') downloadCopy(); });
+const EMB = (() => { try { return JSON.parse($('#pp-daten').textContent); } catch (e) { return null; } })();
+window.PP_TEST = {store, flush, checkRemote, extractData, get d(){ return d; }};
 
 /* ---------- Rechnen ---------- */
 const share = (code, a) => { if (!code) return 0; const p = code.split('/'); return p.includes(a) ? 1 / p.length : 0; };
@@ -1191,7 +1278,7 @@ function vKraeuter(st){
   const head = `<div class="toolbar"><h2>Kräuter Eichhof · KW ${ui.kw}</h2><span class="muted">${weekDates(t)}</span>
     ${seg('krview', ui.krView, [['woche', 'Woche planen'], ['jahr', 'Jahresübersicht'], ['aufgaben', 'Aufgaben']])}
     ${ui.krView === 'woche' ? `<span class="xs">Zeigen</span>${seg('krshow', ui.krShow, [['alle', 'alle'], ['da', 'nur wer da ist']])}` : ''}
-    <span class="sp"></span><button class="btn" data-act="req-pop" data-area="EIC">Leute anfragen</button></div>
+    <span class="sp"></span>${reqLink('EIC')}<button class="btn" data-act="req-pop" data-area="EIC">Leute anfragen</button></div>
     ${ui.krView !== 'aufgaben' ? `<div class="toolbar xs">Bedarf ${fmtN(st.soll.EIC.T[t])} · eingeplant ${fmt(st.ist.EIC.T[t])} (Frauen ${fmt(st.ist.EIC.F[t])}, Männer ${fmt(st.ist.EIC.M[t])}) ${stTxt(dz(st.ist.EIC.T[t], st.soll.EIC.T[t]))}
       · <span title="${esc(ein.map(name).join(', '))}">Eintritte ${ein.length}</span> · <span title="${esc(aus.map(name).join(', '))}">Austritte ${aus.length}</span> · Ferien ${cnt('F')} · Krank ${cnt('K')} · Unfall ${cnt('U')}</div>` : ''}`;
   if (ui.krView === 'aufgaben') return `<div class="sheet gut"><div class="stack">${head}${aufgabenView()}</div></div>`;
@@ -1291,15 +1378,15 @@ function vGemuese(st){
   body += row('Summe Stunden', sumH) + row(`Bedarf: Personen (Stunden ÷ ${d.std})`, soll, {bg:'FRE', total:false}) + row('Eingeplant', ist, {total:false})
     + row('Differenz (eingeplant − Bedarf)', ist.map((v, i) => dz(v, soll[i])), {diff:1, total:false}) + row('Jätstunden (automatisierbar)', jaet);
   const team = teamData('FRE', t);
-  const trow = (x, grey) => `<div class="trow${grey ? ' grey' : ''}"><span class="fm">${x.p.fm || '?'}</span><span class="nm">${pLink(x.p)}</span>${grey ? `<span class="tag">${esc(grey.why)}</span>` : x.s < 1 ? `<span class="tag">${fmt(x.s)}</span>` : ''}
+  const trow = (x, grey) => { const nt = d.notes[`${x.p.id}:${t}`]; return `<div class="trow${grey ? ' grey' : ''}"${nt ? ` title="${esc(nt)}"` : ''}><span class="fm">${x.p.fm || '?'}</span><span class="nm">${pLink(x.p)}</span>${nt ? '<span class="nt" aria-label="Kommentar"></span>' : ''}${grey ? `<span class="tag">${esc(grey.why)}</span>` : x.s < 1 ? `<span class="tag">${fmt(x.s)}</span>` : ''}
     ${!grey ? `<button data-act="abs-pop" data-p="${x.p.id}">Abwesend …</button>` : grey.kind === 'abs' ? `<button data-act="back-pop" data-p="${x.p.id}" data-kind="abs">Wieder da …</button>`
-      : grey.kind === 'leer' ? `<button data-act="back-pop" data-p="${x.p.id}" data-kind="leer">Einplanen …</button>` : `<button data-act="back-pop" data-p="${x.p.id}" data-kind="away">Zurückholen …</button>`}</div>`;
+      : grey.kind === 'leer' ? `<button data-act="back-pop" data-p="${x.p.id}" data-kind="leer">Einplanen …</button>` : `<button data-act="back-pop" data-p="${x.p.id}" data-kind="away">Zurückholen …</button>`}</div>`; };
   const prev = d.jahre.find(j => j.y === ui.year - 1);
   return `<div class="sheet gut"><div class="stack">
     <div class="toolbar"><h2>Arbeitsplanung Freiland ${ui.year}</h2>
       <label for="std">Stunden pro Person und Woche <input class="inp" id="std" type="number" min="20" max="70" value="${d.std}" style="width:60px"></label>
       <span class="muted">KW ${ui.kw}: Bedarf ${fmtN(st.soll.FRE.T[t])} · eingeplant ${fmt(st.ist.FRE.T[t])}</span> ${stTxt(dz(st.ist.FRE.T[t], st.soll.FRE.T[t]))}<span class="sp"></span>
-      <button class="btn" data-act="std-add">+ Tätigkeit</button>${prev ? `<button class="btn" data-act="std-vj">Stunden ${prev.y} übernehmen</button>` : ''}<button class="btn" data-act="req-pop" data-area="FRE">Leute anfragen</button></div>
+      <button class="btn" data-act="std-add">+ Tätigkeit</button>${prev ? `<button class="btn" data-act="std-vj">Stunden ${prev.y} übernehmen</button>` : ''}${reqLink('FRE')}<button class="btn" data-act="req-pop" data-area="FRE">Leute anfragen</button></div>
     <div class="gridwrap" style="max-height:62vh;min-height:300px"><table class="xl">${weekHead('<th class="st0" style="min-width:230px;max-width:none;left:0;text-align:left">Tätigkeit (Stunden pro Woche)</th>', '<th class="st0" style="left:0"></th>', {right:'<th rowspan="2">Summe</th>'})}<tbody>${body}</tbody></table></div>
     <div class="cols">
       <div class="panel"><h3>Team in KW ${ui.kw} <span class="n">· ${team.act.length} da, ${team.grey.length} nicht da</span></h3>
@@ -1418,6 +1505,14 @@ function openReqPop(area, anchor){
     <div class="prow"><label class="xs" for="rq-v">von KW <input id="rq-v" type="number" min="1" max="${n}" value="${ui.kw}"></label><label class="xs" for="rq-b">bis KW <input id="rq-b" type="number" min="1" max="${n}" value="${ui.kw}"></label><span class="xs">${ui.year}</span></div>
     <label class="lbl" for="rq-t">Wofür</label><input id="rq-t" placeholder="z.B. Pikieren"></div>
     <div class="pop-f"><span class="preview">Erscheint in der Personalsitzung.</span><span class="sp"></span><button class="btn primary" data-act="req-send">Anfrage senden</button></div>`, anchor, {type:'req'});
+}
+const openReqs = area => d.anfragen.filter(r => r.st === 'offen' && r.area === area && (r.t2 ?? r.t) >= todayT());
+const reqLink = area => { const n = openReqs(area).length; return n ? `<button class="lnk rqlink" data-act="req-list" data-area="${area}">${n} offene Anfrage${n > 1 ? 'n' : ''}</button>` : ''; };
+function openReqList(area, anchor){
+  const list = openReqs(area);
+  openPop(`${popHead(`Offene Anfragen ${AREA[area].k}`)}<div class="pop-sec">${list.map(r => `<div class="prow" style="justify-content:space-between"><span>${r.n} ${r.fm === 'F' ? 'Frauen' : r.fm === 'M' ? 'Männer' : 'Personen'} · ${rangeLbl(r.t, r.t2 ?? r.t)}${r.text ? ' · ' + esc(r.text) : ''}<br><span class="xs">${esc(r.von)}</span></span>
+    <button class="btn sm" data-act="req-done" data-id="${r.id}">erledigt</button></div>`).join('') || '<span class="xs">Keine offenen Anfragen.</span>'}</div>
+    <div class="pop-f"><span class="preview">Die Personalchefin sieht die Anfragen in der Personalsitzung.</span></div>`, anchor, {type:'reqlist', area});
 }
 function sendReq(){
   const area = $('#rq-a').value, v = clampKw($('#rq-v').value), b = Math.max(v, clampKw($('#rq-b').value)), n = Math.max(1, +$('#rq-n').value || 1), fm = $('#rq-fm').value, text = $('#rq-t').value.trim();
@@ -1722,6 +1817,12 @@ document.addEventListener('click', e => {
   if (justSelected){ justSelected = false; return; }
   const tab = t.closest('button[data-tab]'); if (tab){ ui.tab = tab.dataset.tab; location.hash = ui.tab; closePop(); render(); return; }
   if (t.closest('[data-pop="close"]')){ closePop(); return; }
+  const mn = t.closest('[data-menu]'); if (mn){ const m = mn.dataset.menu; closePop();
+    if (m === 'connect') openConnect(); else if (m === 'print') window.print(); else if (m === 'download') downloadCopy();
+    else if (m === 'import') pickFile('import'); else if (m === 'update') pickFile('update'); else if (m === 'help') openHelp(); return; }
+  const cn = t.closest('[data-cn]'); if (cn){ doConnect(cn.dataset.cn); return; }
+  if (t.closest('[data-act="import-ok"]')){ doImport(); return; }
+  const bn = t.closest('#banner [data-act]'); if (bn){ const a = bn.dataset.act; if (a === 'connect') openConnect(); else if (a === 'download') downloadCopy(); else if (a === 'retry') flush(); return; }
   if (t.closest('[data-drawer="close"]')){ drawer.hidden = true; return; }
   if (popState){
     const pk = t.closest('[data-pick]');
@@ -1779,7 +1880,9 @@ document.addEventListener('click', e => {
     commit(`${name(p)}: Kommentar ${kwLbl(tw)}`, dd => { if (v) dd.notes[`${pid}:${tw}`] = v; else delete dd.notes[`${pid}:${tw}`]; }); }
   else if (a === 'req-pop') openReqPop(act.dataset.area || '', act);
   else if (a === 'req-send') sendReq();
-  else if (a === 'req-done'){ const id = +act.dataset.id; commit('Anfrage erledigt', dd => { const r = dd.anfragen.find(x => x.id === id); if (r) r.st = 'erledigt'; }); }
+  else if (a === 'req-done'){ const id = +act.dataset.id, ra = (d.anfragen.find(x => x.id === id) || {}).area, inList = popState && popState.type === 'reqlist';
+    commit('Anfrage erledigt', dd => { const r = dd.anfragen.find(x => x.id === id); if (r) r.st = 'erledigt'; }); if (inList){ closePop(); if (openReqs(ra).length) openReqList(ra, null); } }
+  else if (a === 'req-list') openReqList(act.dataset.area, act);
   else if (a === 'assign') openAssignPop(+act.dataset.p, act.dataset.from, act.dataset.to, +act.dataset.t, act);
   else if (a === 'mut-add'){ const pid = +$('#mu-p').value || null, typ = $('#mu-typ').value, bem = $('#mu-b').value.trim(), buero = $('#mu-d').value || '', p = pid ? P(d, pid) : null;
     if (!p && !bem){ toast('Bitte Person wählen oder Bemerkung schreiben.'); return; }
@@ -1870,13 +1973,23 @@ document.addEventListener('keydown', e => {
   const inField = e.target.closest('input,textarea,select');
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !inField){ e.preventDefault(); $('#b-undo').click(); }
   else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')) && !inField){ e.preventDefault(); $('#b-redo').click(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){ e.preventDefault(); if (store.mode === 'fs') flush(); else if (store.mode === 'view') openConnect(); else downloadCopy(); }
   else if (e.key === 'Escape'){ if (!pop.hidden) closePop(); else if (!drawer.hidden) drawer.hidden = true; }
   else if (e.key === 'Enter' && !pop.hidden && popState && (popState.type === 'plan' || popState.type === 'kr') && !e.target.closest('textarea')){ e.preventDefault(); applyPop(false); }
   else if (e.key === 'Enter' && !pop.hidden && popState && popState.type === 'who'){ e.preventDefault(); pop.querySelector('[data-act="who-save"]').click(); }
+  else if (e.key === 'Enter' && !pop.hidden && popState && popState.type === 'connect' && e.target.id === 'cn-user'){ e.preventDefault(); const b = pop.querySelector('[data-cn]'); if (b) b.click(); }
 });
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (d && TABS.some(t => t.id === h) && h !== ui.tab){ ui.tab = h; closePop(); render(); } });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkRemote(); });
-showStart();
+$('#b-file').onclick = () => { if (d) fileMenu(); };
+$('#b-help').onclick = () => openHelp();
+function boot(){
+  if (validData(EMB)){
+    d = EMB.data; store.mig = migrate(d); store.version = EMB.version || 0; store.savedAt = EMB.gespeichert || null;
+    store.mode = FS ? 'view' : 'nofs'; goT(todayT()); $('#start').hidden = true; render(); setSave(FS ? 'view' : 'nofs0');
+  } else { store.mode = FS ? 'view' : 'nofs'; showEmpty(); }
+}
+boot();
 </script>
 </body>
 </html>

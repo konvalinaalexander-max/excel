@@ -5,3 +5,5 @@
 __pycache__/
 personalplanung-daten*.json
 Sicherungen/
+/personalplanung.html
+personalplanung_*.html
